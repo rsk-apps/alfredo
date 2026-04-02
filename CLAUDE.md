@@ -31,6 +31,7 @@ internal/
 - **No EventPublisher**: Pet-care services are pure CRUD. Cross-domain side-effects (webhook events to n8n) happen only in Use Cases in `internal/app/`.
 - **Fire-and-forget webhooks**: Webhook failures are logged and swallowed. Pet-care data always saves.
 - **Handler interfaces unchanged**: HTTP handlers define narrow interfaces. Use Cases implement the same interfaces, so handlers don't change — only the injected dependency changes (service → use case for mutations).
+- **Domain isolation**: petcare domain must not import from app/; app/ imports and orchestrates services. This enforces unidirectional dependency.
 
 ## Routes
 
@@ -81,6 +82,13 @@ make generate       # mockery
 ```
 
 `make run` auto-sources `.env` from the project root if present — use it to set `APP_AUTH_API_KEY` and other vars locally without modifying `config.yaml`.
+
+### Testing
+
+- **Domain service tests** (petcare/service): mock repository interfaces, test CRUD logic in isolation
+- **Use case tests** (app/*_test.go): mock domain services, test cross-domain orchestration and webhook emission
+- **Handlers**: tested through use case layer; keep handler tests minimal (just wire-up verification)
+- **Run tests**: `make test` runs all tests in internal/
 
 ### Production
 
