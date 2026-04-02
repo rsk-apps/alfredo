@@ -38,6 +38,9 @@ func (s *VaccineService) RecordVaccine(ctx context.Context, in RecordVaccineInpu
 	if in.Name == "" {
 		return nil, fmt.Errorf("%w: name is required", domain.ErrValidation)
 	}
+	if in.AdministeredAt.IsZero() {
+		return nil, fmt.Errorf("%w: administered_at is required", domain.ErrValidation)
+	}
 	v, err := s.repo.CreateVaccine(ctx, domain.Vaccine{
 		ID:             uuid.New().String(),
 		PetID:          in.PetID,

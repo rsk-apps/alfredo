@@ -34,7 +34,11 @@ func (h *VaccineHandler) Register(g *echo.Group) {
 }
 
 func (h *VaccineHandler) ListVaccines(c echo.Context) error {
-	vs, err := h.svc.ListVaccines(c.Request().Context(), c.Param("id"))
+	id, ok := parseUUID(c, "id")
+	if !ok {
+		return nil
+	}
+	vs, err := h.svc.ListVaccines(c.Request().Context(), id)
 	if err != nil {
 		return mapError(c, err)
 	}
@@ -42,36 +46,51 @@ func (h *VaccineHandler) ListVaccines(c echo.Context) error {
 	for _, v := range vs {
 		resp = append(resp, vaccineToMap(v))
 	}
-	logger.FromEcho(c).Info("vaccines listed", zap.String("pet_id", c.Param("id")), zap.Int("count", len(vs)))
+	logger.FromEcho(c).Info("vaccines listed", zap.String("pet_id", id), zap.Int("count", len(vs)))
 	return c.JSON(http.StatusOK, resp)
 }
 
 func (h *VaccineHandler) RecordVaccine(c echo.Context) error {
+	id, ok := parseUUID(c, "id")
+	if !ok {
+		return nil
+	}
 	var req struct {
-		Name        string  `json:"name"`
-		Date        string  `json:"date"`
+		Name        string  `json:"name" validate:"required,min=1,max=100"`
+		Date        string  `json:"date" validate:"required"`
 		NextDueAt   *string `json:"next_due_at"`
-		VetName     *string `json:"vet_name"`
-		BatchNumber *string `json:"batch_number"`
-		Notes       *string `json:"notes"`
+		VetName     *string `json:"vet_name" validate:"omitempty,max=100"`
+		BatchNumber *string `json:"batch_number" validate:"omitempty,max=50"`
+		Notes       *string `json:"notes" validate:"omitempty,max=500"`
 	}
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, errorBody("invalid_request_body"))
+		return c.JSON(http.StatusBadRequest, newErrorResponse("invalid_request_body", "Request body is invalid JSON", nil))
+	}
+	if !validateRequest(c, &req) {
+		return nil
 	}
 	adminAt, err := time.Parse(time.RFC3339, req.Date)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, errorBody("invalid date, use RFC3339"))
+		return c.JSON(http.StatusBadRequest, newErrorResponse(
+			"validation_failed",
+			"Request validation failed",
+			[]fieldError{{Field: "date", Issue: "must be RFC3339 format"}},
+		))
 	}
 	var nextDue *time.Time
 	if req.NextDueAt != nil {
 		t, err := time.Parse("2006-01-02", *req.NextDueAt)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, errorBody("invalid next_due_at, use YYYY-MM-DD"))
+			return c.JSON(http.StatusBadRequest, newErrorResponse(
+				"validation_failed",
+				"Request validation failed",
+				[]fieldError{{Field: "next_due_at", Issue: "must be YYYY-MM-DD format"}},
+			))
 		}
 		nextDue = &t
 	}
 	v, err := h.svc.RecordVaccine(c.Request().Context(), service.RecordVaccineInput{
-		PetID: c.Param("id"), Name: req.Name, AdministeredAt: adminAt,
+		PetID: id, Name: req.Name, AdministeredAt: adminAt,
 		NextDueAt: nextDue, VetName: req.VetName, BatchNumber: req.BatchNumber, Notes: req.Notes,
 	})
 	if err != nil {
@@ -82,10 +101,18 @@ func (h *VaccineHandler) RecordVaccine(c echo.Context) error {
 }
 
 func (h *VaccineHandler) DeleteVaccine(c echo.Context) error {
-	if err := h.svc.DeleteVaccine(c.Request().Context(), c.Param("id"), c.Param("vid")); err != nil {
+	petID, ok := parseUUID(c, "id")
+	if !ok {
+		return nil
+	}
+	vaccineID, ok := parseUUID(c, "vid")
+	if !ok {
+		return nil
+	}
+	if err := h.svc.DeleteVaccine(c.Request().Context(), petID, vaccineID); err != nil {
 		return mapError(c, err)
 	}
-	logger.FromEcho(c).Info("vaccine deleted", zap.String("pet_id", c.Param("id")), zap.String("vaccine_id", c.Param("vid")))
+	logger.FromEcho(c).Info("vaccine deleted", zap.String("pet_id", petID), zap.String("vaccine_id", vaccineID))
 	return c.NoContent(http.StatusNoContent)
 }
 

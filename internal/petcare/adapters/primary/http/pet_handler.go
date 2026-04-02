@@ -37,13 +37,13 @@ func (h *PetHandler) Register(g *echo.Group) {
 }
 
 type petRequest struct {
-	Name           string   `json:"name"`
-	Species        string   `json:"species"`
-	Breed          *string  `json:"breed"`
+	Name           string   `json:"name" validate:"required,min=1,max=100"`
+	Species        string   `json:"species" validate:"required,min=1,max=50"`
+	Breed          *string  `json:"breed" validate:"omitempty,max=100"`
 	BirthDate      *string  `json:"birth_date"`
-	WeightKg       *float64 `json:"weight_kg"`
-	DailyFoodGrams *float64 `json:"daily_food_grams"`
-	PhotoPath      *string  `json:"photo_path"`
+	WeightKg       *float64 `json:"weight_kg" validate:"omitempty,gt=0"`
+	DailyFoodGrams *float64 `json:"daily_food_grams" validate:"omitempty,gt=0"`
+	PhotoPath      *string  `json:"photo_path" validate:"omitempty,max=255"`
 }
 
 type petResponse struct {
@@ -92,13 +92,20 @@ func (h *PetHandler) List(c echo.Context) error {
 func (h *PetHandler) Create(c echo.Context) error {
 	var req petRequest
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, errorBody("invalid_request_body"))
+		return c.JSON(http.StatusBadRequest, newErrorResponse("invalid_request_body", "Request body is invalid JSON", nil))
+	}
+	if !validateRequest(c, &req) {
+		return nil
 	}
 	var birthDate *time.Time
 	if req.BirthDate != nil {
 		t, err := time.Parse("2006-01-02", *req.BirthDate)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, errorBody("invalid birth_date format, use YYYY-MM-DD"))
+			return c.JSON(http.StatusBadRequest, newErrorResponse(
+				"validation_failed",
+				"Request validation failed",
+				[]fieldError{{Field: "birth_date", Issue: "must be YYYY-MM-DD format"}},
+			))
 		}
 		birthDate = &t
 	}
@@ -115,7 +122,11 @@ func (h *PetHandler) Create(c echo.Context) error {
 }
 
 func (h *PetHandler) GetByID(c echo.Context) error {
-	pet, err := h.svc.GetByID(c.Request().Context(), c.Param("id"))
+	id, ok := parseUUID(c, "id")
+	if !ok {
+		return nil
+	}
+	pet, err := h.svc.GetByID(c.Request().Context(), id)
 	if err != nil {
 		return mapError(c, err)
 	}
@@ -124,19 +135,30 @@ func (h *PetHandler) GetByID(c echo.Context) error {
 }
 
 func (h *PetHandler) Update(c echo.Context) error {
+	id, ok := parseUUID(c, "id")
+	if !ok {
+		return nil
+	}
 	var req petRequest
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, errorBody("invalid_request_body"))
+		return c.JSON(http.StatusBadRequest, newErrorResponse("invalid_request_body", "Request body is invalid JSON", nil))
+	}
+	if !validateRequest(c, &req) {
+		return nil
 	}
 	var birthDate *time.Time
 	if req.BirthDate != nil {
 		t, err := time.Parse("2006-01-02", *req.BirthDate)
 		if err != nil {
-			return c.JSON(http.StatusBadRequest, errorBody("invalid birth_date format, use YYYY-MM-DD"))
+			return c.JSON(http.StatusBadRequest, newErrorResponse(
+				"validation_failed",
+				"Request validation failed",
+				[]fieldError{{Field: "birth_date", Issue: "must be YYYY-MM-DD format"}},
+			))
 		}
 		birthDate = &t
 	}
-	pet, err := h.svc.Update(c.Request().Context(), c.Param("id"), service.UpdatePetInput{
+	pet, err := h.svc.Update(c.Request().Context(), id, service.UpdatePetInput{
 		Name: req.Name, Species: req.Species, Breed: req.Breed,
 		BirthDate: birthDate, WeightKg: req.WeightKg,
 		DailyFoodGrams: req.DailyFoodGrams, PhotoPath: req.PhotoPath,
@@ -149,11 +171,13 @@ func (h *PetHandler) Update(c echo.Context) error {
 }
 
 func (h *PetHandler) Delete(c echo.Context) error {
-	petID := c.Param("id")
-	if err := h.svc.Delete(c.Request().Context(), petID); err != nil {
+	id, ok := parseUUID(c, "id")
+	if !ok {
+		return nil
+	}
+	if err := h.svc.Delete(c.Request().Context(), id); err != nil {
 		return mapError(c, err)
 	}
-	logger.FromEcho(c).Info("pet deleted", zap.String("pet_id", petID))
+	logger.FromEcho(c).Info("pet deleted", zap.String("pet_id", id))
 	return c.NoContent(http.StatusNoContent)
 }
-
