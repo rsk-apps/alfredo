@@ -56,12 +56,12 @@ func (h *VaccineHandler) RecordVaccine(c echo.Context) error {
 		return nil
 	}
 	var req struct {
-		Name        string  `json:"name" validate:"required,min=1,max=100"`
-		Date        string  `json:"date" validate:"required"`
-		NextDueAt   *string `json:"next_due_at"`
-		VetName     *string `json:"vet_name" validate:"omitempty,max=100"`
-		BatchNumber *string `json:"batch_number" validate:"omitempty,max=50"`
-		Notes       *string `json:"notes" validate:"omitempty,max=500"`
+		Name           string `json:"name" validate:"required,min=1,max=100"`
+		Date           string `json:"date" validate:"required"`
+		RecurrenceDays *int   `json:"recurrence_days" validate:"omitempty,min=1"`
+		VetName        *string `json:"vet_name" validate:"omitempty,max=100"`
+		BatchNumber    *string `json:"batch_number" validate:"omitempty,max=50"`
+		Notes          *string `json:"notes" validate:"omitempty,max=500"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, newErrorResponse("invalid_request_body", "Request body is invalid JSON", nil))
@@ -77,21 +77,9 @@ func (h *VaccineHandler) RecordVaccine(c echo.Context) error {
 			[]fieldError{{Field: "date", Issue: "must be RFC3339 format"}},
 		))
 	}
-	var nextDue *time.Time
-	if req.NextDueAt != nil {
-		t, err := time.Parse("2006-01-02", *req.NextDueAt)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, newErrorResponse(
-				"validation_failed",
-				"Request validation failed",
-				[]fieldError{{Field: "next_due_at", Issue: "must be YYYY-MM-DD format"}},
-			))
-		}
-		nextDue = &t
-	}
 	v, err := h.svc.RecordVaccine(c.Request().Context(), service.RecordVaccineInput{
 		PetID: id, Name: req.Name, AdministeredAt: adminAt,
-		NextDueAt: nextDue, VetName: req.VetName, BatchNumber: req.BatchNumber, Notes: req.Notes,
+		RecurrenceDays: req.RecurrenceDays, VetName: req.VetName, BatchNumber: req.BatchNumber, Notes: req.Notes,
 	})
 	if err != nil {
 		return mapError(c, err)

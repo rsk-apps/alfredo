@@ -15,6 +15,7 @@ type RecordVaccineInput struct {
 	PetID          string
 	Name           string
 	AdministeredAt time.Time
+	RecurrenceDays *int
 	NextDueAt      *time.Time
 	VetName        *string
 	BatchNumber    *string

@@ -41,19 +41,24 @@ func (s *stubVaccineService) ListVaccines(_ context.Context, _ string) ([]domain
 	return nil, nil
 }
 
-func TestVaccineUseCase_RecordVaccine_emitsWhenNextDueSet(t *testing.T) {
+func TestVaccineUseCase_RecordVaccine_emitsWithRecurrenceDays(t *testing.T) {
 	spy := &spyEmitter{}
-	due := time.Now().Add(24 * time.Hour)
+	due := time.Now().Add(365 * 24 * time.Hour)
+	recDays := 365
 	svc := &stubVaccineService{
 		vaccine: &domain.Vaccine{ID: "v1", PetID: "p1", Name: "Rabies", NextDueAt: &due},
 	}
 	uc := app.NewVaccineUseCase(svc, &fakePetGetter{}, spy, zap.NewNop())
 
-	if _, err := uc.RecordVaccine(context.Background(), service.RecordVaccineInput{PetID: "p1"}); err != nil {
+	if _, err := uc.RecordVaccine(context.Background(), service.RecordVaccineInput{
+		PetID:          "p1",
+		RecurrenceDays: &recDays,
+		AdministeredAt: time.Now(),
+	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(spy.events) != 2 || spy.events[0] != "vaccine.taken" || spy.events[1] != "vaccine.expire" {
-		t.Errorf("events = %v, want [vaccine.taken vaccine.expire]", spy.events)
+	if len(spy.events) != 1 || spy.events[0] != "vaccine.taken" {
+		t.Errorf("events = %v, want [vaccine.taken]", spy.events)
 	}
 }
 

@@ -35,26 +35,26 @@ func (uc *VaccineUseCase) ListVaccines(ctx context.Context, petID string) ([]dom
 }
 
 func (uc *VaccineUseCase) RecordVaccine(ctx context.Context, in service.RecordVaccineInput) (*domain.Vaccine, error) {
+	// Calculate next_due_at from recurrence_days if provided
+	if in.RecurrenceDays != nil && *in.RecurrenceDays > 0 {
+		nextDue := in.AdministeredAt.AddDate(0, 0, *in.RecurrenceDays)
+		in.NextDueAt = &nextDue
+	}
 	v, err := uc.vaccine.RecordVaccine(ctx, in)
 	if err != nil {
 		return nil, err
 	}
-	uc.emitter.Emit(ctx, "vaccine.taken", vaccineTakenPayload{
+	payload := vaccineTakenPayload{
 		PetID:       v.PetID,
 		PetName:     uc.petName(ctx, v.PetID),
 		VaccineID:   v.ID,
 		VaccineName: v.Name,
 		Date:        v.AdministeredAt,
-	})
-	if v.NextDueAt != nil {
-		uc.emitter.Emit(ctx, "vaccine.expire", vaccineExpirePayload{
-			PetID:       v.PetID,
-			PetName:     uc.petName(ctx, v.PetID),
-			VaccineID:   v.ID,
-			VaccineName: v.Name,
-			ExpireAt:    *v.NextDueAt,
-		})
 	}
+	if in.RecurrenceDays != nil {
+		payload.RecurrenceDays = in.RecurrenceDays
+	}
+	uc.emitter.Emit(ctx, "vaccine.taken", payload)
 	return v, nil
 }
 
@@ -73,19 +73,12 @@ func (uc *VaccineUseCase) DeleteVaccine(ctx context.Context, petID, vaccineID st
 // --- Payload types ---
 
 type vaccineTakenPayload struct {
-	PetID       string    `json:"pet_id"`
-	PetName     string    `json:"pet_name"`
-	VaccineID   string    `json:"vaccine_id"`
-	VaccineName string    `json:"vaccine_name"`
-	Date        time.Time `json:"date"`
-}
-
-type vaccineExpirePayload struct {
-	PetID       string    `json:"pet_id"`
-	PetName     string    `json:"pet_name"`
-	VaccineID   string    `json:"vaccine_id"`
-	VaccineName string    `json:"vaccine_name"`
-	ExpireAt    time.Time `json:"expire_at"`
+	PetID          string `json:"pet_id"`
+	PetName        string `json:"pet_name"`
+	VaccineID      string `json:"vaccine_id"`
+	VaccineName    string `json:"vaccine_name"`
+	Date           time.Time `json:"date"`
+	RecurrenceDays *int   `json:"recurrence_days,omitempty"`
 }
 
 type vaccineDeletedPayload struct {
