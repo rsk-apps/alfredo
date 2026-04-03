@@ -1,0 +1,33 @@
+meta {
+  name: Start Treatment
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/pets/:id/treatments
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+params:path {
+  id: {{petId}}
+}
+
+body:json {
+  {
+    "name": "Amoxicillin",
+    "dosage_amount": 250,
+    "dosage_unit": "mg",
+    "route": "oral",
+    "interval_hours": 12,
+    "started_at": "2026-04-03T08:00:00Z",
+    "ended_at": "2026-04-13T08:00:00Z",
+    "vet_name": "Dr. Costa",
+    "notes": "Give with food"
+  }
+}

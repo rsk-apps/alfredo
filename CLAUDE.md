@@ -46,6 +46,10 @@ internal/
 | `GET /api/v1/pets/:id/vaccines` | VaccineHandler |
 | `POST /api/v1/pets/:id/vaccines` | VaccineHandler |
 | `DELETE /api/v1/pets/:id/vaccines/:vid` | VaccineHandler |
+| `POST /api/v1/pets/:id/treatments` | TreatmentHandler |
+| `GET /api/v1/pets/:id/treatments` | TreatmentHandler |
+| `GET /api/v1/pets/:id/treatments/:tid` | TreatmentHandler |
+| `DELETE /api/v1/pets/:id/treatments/:tid` | TreatmentHandler |
 
 ## API Collection
 
@@ -57,7 +61,8 @@ bruno/
 ├── environments/Local.bru  — baseUrl + sample UUIDs for local dev
 ├── Healthcheck.bru
 ├── pets/                   — 5 requests (CRUD)
-└── care/vaccines/          — 3 requests
+├── care/vaccines/          — 3 requests
+└── treatments/             — 4 requests (CRUD)
 ```
 
 **Import**: Open Bruno → Import Collection → select `bruno/` folder → set environment to **Local**.
@@ -141,3 +146,5 @@ All events are posted to `POST {base_url}/events`. The n8n workflow uses a Switc
 | `pet.deleted` | `DELETE /api/v1/pets/:id` | `pet_id`, `pet_name` |
 | `vaccine.taken` | `POST /api/v1/pets/:id/vaccines` | `pet_id`, `pet_name`, `vaccine_id`, `vaccine_name`, `date`, `recurrence_days` (omitted if not set) |
 | `vaccine.deleted` | `DELETE /api/v1/pets/:id/vaccines/:vid` | `pet_id`, `pet_name`, `vaccine_id` |
+| `treatment.doses_scheduled` | `POST /api/v1/pets/:id/treatments` and daily extender job | `pet_id`, `pet_name`, `treatment_id`, `treatment_name`, `dosage_amount`, `dosage_unit`, `route`, `interval_hours`, `doses` (array of `{dose_id, scheduled_for}`) |
+| `treatment.stopped` | `DELETE /api/v1/pets/:id/treatments/:tid` | `pet_id`, `pet_name`, `treatment_id`, `treatment_name`, `stopped_at`, `deleted_dose_ids` |

@@ -1,0 +1,19 @@
+meta {
+  name: List Treatments
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/pets/:id/treatments
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+params:path {
+  id: {{petId}}
+}

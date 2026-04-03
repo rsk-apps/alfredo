@@ -1,0 +1,20 @@
+meta {
+  name: Get Treatment
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/pets/:id/treatments/:tid
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+params:path {
+  id: {{petId}}
+  tid: {{treatmentId}}
+}
