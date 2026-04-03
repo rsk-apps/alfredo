@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // register sqlite3 driver
 )
 
 //go:embed migrations/001_initial.sql

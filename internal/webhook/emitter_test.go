@@ -82,7 +82,7 @@ func TestEmitter_noopWhenURLEmpty(t *testing.T) {
 }
 
 func TestEmitter_logsN8nResponseBodyOnError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`{"message":"Invalid node parameter"}`))
 	}))
@@ -113,7 +113,7 @@ func TestEmitter_logsN8nResponseBodyOnError(t *testing.T) {
 }
 
 func TestEmitter_debugLogsOutgoingPayload(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()

@@ -2,9 +2,8 @@ package app
 
 import (
 	"context"
-	"net/http"
+	"time"
 
-	"github.com/labstack/echo/v4"
 	"github.com/rafaelsoares/alfredo/internal/shared/health"
 )
 
@@ -19,6 +18,9 @@ func NewHealthAggregator(checkers map[string]HealthPinger) *HealthAggregator {
 }
 
 func (h *HealthAggregator) Check(ctx context.Context) health.HealthResult {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
 	deps := make(map[string]health.DependencyStatus, len(h.checkers))
 	allHealthy := true
 
@@ -38,19 +40,3 @@ func (h *HealthAggregator) Check(ctx context.Context) health.HealthResult {
 	return health.HealthResult{Status: status, Dependencies: deps}
 }
 
-// HealthHandler handles GET /api/v1/health — the unified health endpoint.
-type HealthHandler struct {
-	aggregator *HealthAggregator
-}
-
-func NewHealthHandler(aggregator *HealthAggregator) *HealthHandler {
-	return &HealthHandler{aggregator: aggregator}
-}
-
-func (h *HealthHandler) Health(c echo.Context) error {
-	result := h.aggregator.Check(c.Request().Context())
-	if result.Status == "healthy" {
-		return c.JSON(http.StatusOK, result)
-	}
-	return c.JSON(http.StatusServiceUnavailable, result)
-}

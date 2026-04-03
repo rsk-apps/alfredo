@@ -74,7 +74,7 @@ All routes except `GET /api/v1/health` require an API key. Accepted headers (fir
 
 ```bash
 make build          # compile ./alfredo binary
-make run            # run server via go run
+make run            # build + run server in background (writes alfredo.pid)
 make stop           # kill server using alfredo.pid
 make test           # go test ./internal/...
 make tidy           # go mod tidy
@@ -139,8 +139,5 @@ All events are posted to `POST {base_url}/events`. The n8n workflow uses a Switc
 |---|---|---|
 | `pet.created` | `POST /api/v1/pets` | `id`, `name`, `species`, `breed`, `birth_date` |
 | `pet.deleted` | `DELETE /api/v1/pets/:id` | `pet_id`, `pet_name` |
-| `vaccine.taken` | `POST /api/v1/pets/:id/vaccines` | `pet_id`, `pet_name`, `vaccine_id`, `vaccine_name`, `date` |
-| `vaccine.expire` | `POST /api/v1/pets/:id/vaccines` ¹ | `pet_id`, `pet_name`, `vaccine_id`, `vaccine_name`, `expire_at` |
+| `vaccine.taken` | `POST /api/v1/pets/:id/vaccines` | `pet_id`, `pet_name`, `vaccine_id`, `vaccine_name`, `date`, `recurrence_days` (omitted if not set) |
 | `vaccine.deleted` | `DELETE /api/v1/pets/:id/vaccines/:vid` | `pet_id`, `pet_name`, `vaccine_id` |
-
-¹ Only emitted when `next_due_at` is set.

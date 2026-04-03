@@ -42,9 +42,9 @@ func (h *VaccineHandler) ListVaccines(c echo.Context) error {
 	if err != nil {
 		return mapError(c, err)
 	}
-	resp := make([]map[string]any, 0, len(vs))
+	resp := make([]vaccineResponse, 0, len(vs))
 	for _, v := range vs {
-		resp = append(resp, vaccineToMap(v))
+		resp = append(resp, toVaccineResponse(v))
 	}
 	logger.FromEcho(c).Info("vaccines listed", zap.String("pet_id", id), zap.Int("count", len(vs)))
 	return c.JSON(http.StatusOK, resp)
@@ -85,7 +85,7 @@ func (h *VaccineHandler) RecordVaccine(c echo.Context) error {
 		return mapError(c, err)
 	}
 	logger.FromEcho(c).Info("vaccine recorded", zap.String("pet_id", v.PetID), zap.String("vaccine_id", v.ID), zap.String("name", v.Name))
-	return c.JSON(http.StatusCreated, vaccineToMap(*v))
+	return c.JSON(http.StatusCreated, toVaccineResponse(*v))
 }
 
 func (h *VaccineHandler) DeleteVaccine(c echo.Context) error {
@@ -104,12 +104,32 @@ func (h *VaccineHandler) DeleteVaccine(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-// --- response helper ---
+// --- response types ---
 
-func vaccineToMap(v domain.Vaccine) map[string]any {
-	m := map[string]any{"id": v.ID, "pet_id": v.PetID, "name": v.Name, "date": v.AdministeredAt.Format(time.RFC3339), "vet_name": v.VetName, "batch_number": v.BatchNumber, "notes": v.Notes}
-	if v.NextDueAt != nil {
-		m["next_due_at"] = v.NextDueAt.Format("2006-01-02")
+type vaccineResponse struct {
+	ID          string  `json:"id"`
+	PetID       string  `json:"pet_id"`
+	Name        string  `json:"name"`
+	Date        string  `json:"date"`
+	NextDueAt   *string `json:"next_due_at,omitempty"`
+	VetName     *string `json:"vet_name,omitempty"`
+	BatchNumber *string `json:"batch_number,omitempty"`
+	Notes       *string `json:"notes,omitempty"`
+}
+
+func toVaccineResponse(v domain.Vaccine) vaccineResponse {
+	r := vaccineResponse{
+		ID:          v.ID,
+		PetID:       v.PetID,
+		Name:        v.Name,
+		Date:        v.AdministeredAt.Format(time.RFC3339),
+		VetName:     v.VetName,
+		BatchNumber: v.BatchNumber,
+		Notes:       v.Notes,
 	}
-	return m
+	if v.NextDueAt != nil {
+		s := v.NextDueAt.Format("2006-01-02")
+		r.NextDueAt = &s
+	}
+	return r
 }

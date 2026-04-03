@@ -12,6 +12,19 @@ linters:
     - ineffassign
     - staticcheck
     - unused
+    - nilerr
+    - bodyclose
+    - godot
+    - prealloc
+    - revive
   settings:
     errcheck:
       check-type-assertions: true
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: var-naming
+          disabled: true

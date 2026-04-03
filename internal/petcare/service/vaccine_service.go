@@ -15,6 +15,8 @@ type RecordVaccineInput struct {
 	PetID          string
 	Name           string
 	AdministeredAt time.Time
+	// RecurrenceDays is set by the HTTP layer and consumed by VaccineUseCase to compute NextDueAt
+	// and include in the vaccine.taken webhook payload. VaccineService itself does not read this field.
 	RecurrenceDays *int
 	NextDueAt      *time.Time
 	VetName        *string

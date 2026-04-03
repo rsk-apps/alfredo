@@ -1,12 +1,19 @@
-.PHONY: run build test tidy generate stop
+.PHONY: run build test lint tidy generate stop
 
-BINARY := ./alfredo
+BINARY  := ./alfredo
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS := -ldflags "-X main.version=$(VERSION)"
 
-run:
-	@if [ -f .env ]; then set -a && . ./.env && set +a; fi; go run ./cmd/server
+run: build
+	@if [ -f .env ]; then set -a && . ./.env && set +a; fi; \
+	$(BINARY) & echo $$! > alfredo.pid; \
+	echo "alfredo started (PID $$(cat alfredo.pid))"
 
 build:
-	go build -o $(BINARY) ./cmd/server
+	go build $(LDFLAGS) -o $(BINARY) ./cmd/server
+
+lint:
+	golangci-lint run ./...
 
 test:
 	go test ./internal/...

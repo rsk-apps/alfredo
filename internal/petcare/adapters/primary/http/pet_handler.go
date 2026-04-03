@@ -97,17 +97,9 @@ func (h *PetHandler) Create(c echo.Context) error {
 	if !validateRequest(c, &req) {
 		return nil
 	}
-	var birthDate *time.Time
-	if req.BirthDate != nil {
-		t, err := time.Parse("2006-01-02", *req.BirthDate)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, newErrorResponse(
-				"validation_failed",
-				"Request validation failed",
-				[]fieldError{{Field: "birth_date", Issue: "must be YYYY-MM-DD format"}},
-			))
-		}
-		birthDate = &t
+	birthDate, ok := parseBirthDate(c, req.BirthDate)
+	if !ok {
+		return nil
 	}
 	pet, err := h.svc.Create(c.Request().Context(), service.CreatePetInput{
 		Name: req.Name, Species: req.Species, Breed: req.Breed,
@@ -146,17 +138,9 @@ func (h *PetHandler) Update(c echo.Context) error {
 	if !validateRequest(c, &req) {
 		return nil
 	}
-	var birthDate *time.Time
-	if req.BirthDate != nil {
-		t, err := time.Parse("2006-01-02", *req.BirthDate)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, newErrorResponse(
-				"validation_failed",
-				"Request validation failed",
-				[]fieldError{{Field: "birth_date", Issue: "must be YYYY-MM-DD format"}},
-			))
-		}
-		birthDate = &t
+	birthDate, ok := parseBirthDate(c, req.BirthDate)
+	if !ok {
+		return nil
 	}
 	pet, err := h.svc.Update(c.Request().Context(), id, service.UpdatePetInput{
 		Name: req.Name, Species: req.Species, Breed: req.Breed,

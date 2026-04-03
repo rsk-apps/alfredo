@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/rafaelsoares/alfredo/internal/petcare/domain"
@@ -68,9 +69,15 @@ func scanVaccine(s scanner) (*domain.Vaccine, error) {
 	if err != nil {
 		return nil, err
 	}
-	v.AdministeredAt, _ = time.Parse(time.RFC3339, adminAt)
+	v.AdministeredAt, err = time.Parse(time.RFC3339, adminAt)
+	if err != nil {
+		return nil, fmt.Errorf("parse administered_at %q: %w", adminAt, err)
+	}
 	if nextDue.Valid && nextDue.String != "" {
-		t, _ := time.Parse("2006-01-02", nextDue.String)
+		t, err := time.Parse("2006-01-02", nextDue.String)
+		if err != nil {
+			return nil, fmt.Errorf("parse next_due_at %q: %w", nextDue.String, err)
+		}
 		v.NextDueAt = &t
 	}
 	return &v, nil

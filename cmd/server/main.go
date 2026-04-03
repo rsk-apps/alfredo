@@ -24,6 +24,8 @@ import (
 	"github.com/rafaelsoares/alfredo/internal/webhook"
 )
 
+var version = "dev"
+
 func main() {
 	// 1. Load config
 	cfg, err := config.Load()
@@ -76,7 +78,7 @@ func main() {
 	healthAgg := app.NewHealthAggregator(map[string]app.HealthPinger{
 		"sqlite": dbChecker,
 	})
-	healthHandler := app.NewHealthHandler(healthAgg)
+	healthHandler := pethttp.NewHealthHTTPHandler(healthAgg)
 
 	// 10. HTTP handlers
 	petHandler := pethttp.NewPetHandler(petUC)
@@ -101,7 +103,7 @@ func main() {
 
 	// 14. Start server with graceful shutdown
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
-	zapLogger.Info("alfredo starting", zap.String("addr", addr))
+	zapLogger.Info("alfredo starting", zap.String("addr", addr), zap.String("version", version))
 
 	srv := &http.Server{
 		Addr:    addr,

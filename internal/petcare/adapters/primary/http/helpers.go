@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
@@ -64,6 +65,22 @@ func validateRequest(c echo.Context, req any) bool {
 		return false
 	}
 	return true
+}
+
+func parseBirthDate(c echo.Context, s *string) (*time.Time, bool) {
+	if s == nil {
+		return nil, true
+	}
+	t, err := time.Parse("2006-01-02", *s)
+	if err != nil {
+		_ = c.JSON(http.StatusBadRequest, newErrorResponse(
+			"validation_failed",
+			"Request validation failed",
+			[]fieldError{{Field: "birth_date", Issue: "must be YYYY-MM-DD format"}},
+		))
+		return nil, false
+	}
+	return &t, true
 }
 
 func mapError(c echo.Context, err error) error {

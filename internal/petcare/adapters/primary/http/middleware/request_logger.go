@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/rafaelsoares/alfredo/internal/logger"
 )
@@ -26,6 +27,7 @@ func RequestLogger(root *zap.Logger) echo.MiddlewareFunc {
 			reqID := uuid.New().String()
 			child := root.With(zap.String("request_id", reqID))
 			logger.Set(c, child)
+			isDebug := root.Core().Enabled(zapcore.DebugLevel)
 
 			req := c.Request()
 			start := time.Now()
@@ -55,17 +57,17 @@ func RequestLogger(root *zap.Logger) echo.MiddlewareFunc {
 
 			switch {
 			case status >= 500:
-				child.Error("request", append(base,
-					zap.String("request_body", body),
-					zap.String("query", query),
-					zap.String("error", errStr),
-				)...)
+				fields := append(base, zap.String("error", errStr))
+				if isDebug {
+					fields = append(fields, zap.String("request_body", body), zap.String("query", query))
+				}
+				child.Error("request", fields...)
 			case status >= 400:
-				child.Warn("request", append(base,
-					zap.String("request_body", body),
-					zap.String("query", query),
-					zap.String("error", errStr),
-				)...)
+				fields := append(base, zap.String("error", errStr))
+				if isDebug {
+					fields = append(fields, zap.String("request_body", body), zap.String("query", query))
+				}
+				child.Warn("request", fields...)
 			default:
 				child.Info("request", base...)
 			}
