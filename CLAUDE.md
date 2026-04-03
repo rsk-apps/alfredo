@@ -115,6 +115,7 @@ docker compose -f docker-compose.prod.yml up -d   # uses ghcr.io/rafaelsoares/al
 | `server.port` | `8080` | `APP_SERVER_PORT` |
 | `database.path` | `./data/alfredo.db` | `APP_DATABASE_PATH` |
 | `webhook.base_url` | `` | `APP_WEBHOOK_BASE_URL` |
+| `webhook.api_key` | `` | `APP_WEBHOOK_API_KEY` |
 | `auth.api_key` | `` | `APP_AUTH_API_KEY` |
 | `log.level` | `info` | `APP_LOG_LEVEL` |
 

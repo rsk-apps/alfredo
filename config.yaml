@@ -10,3 +10,4 @@ photos:
 
 webhook:
   base_url: "http://localhost:5678/webhook"
+  api_key: "change-me-in-production"

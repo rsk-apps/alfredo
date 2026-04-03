@@ -30,6 +30,7 @@ type envelope struct {
 // Call Wait() during shutdown to drain in-flight goroutines.
 type Emitter struct {
 	baseURL string
+	apiKey  string
 	domain  string
 	client  *http.Client
 	logger  *zap.Logger
@@ -39,10 +40,11 @@ type Emitter struct {
 
 const maxConcurrentWebhooks = 20
 
-// New returns an Emitter pointed at baseURL. Pass "" to disable emission.
-func New(baseURL, domain string, logger *zap.Logger) *Emitter {
+// New returns an Emitter pointed at baseURL with the given apiKey. Pass "" to disable emission.
+func New(baseURL, apiKey, domain string, logger *zap.Logger) *Emitter {
 	return &Emitter{
 		baseURL: baseURL,
+		apiKey:  apiKey,
 		domain:  domain,
 		client:  &http.Client{Timeout: 5 * time.Second},
 		logger:  logger,
@@ -100,6 +102,9 @@ func (e *Emitter) Emit(_ context.Context, event string, payload any) {
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
+		if e.apiKey != "" {
+			req.Header.Set("X-Webhook-Key", e.apiKey)
+		}
 
 		resp, err := e.client.Do(req)
 		if err != nil {

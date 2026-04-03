@@ -63,7 +63,7 @@ func main() {
 	defer db.Close() //nolint:errcheck
 
 	// 5. Webhook emitter (no-op when URL is empty)
-	emitter := webhook.New(cfg.Webhook.BaseURL, "petcare", zapLogger)
+	emitter := webhook.New(cfg.Webhook.BaseURL, cfg.Webhook.APIKey, "petcare", zapLogger)
 
 	// 6. Pet-care repositories
 	petRepo := sqlite.NewPetRepository(db)

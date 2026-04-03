@@ -17,6 +17,7 @@ type DatabaseConfig struct {
 
 type WebhookConfig struct {
 	BaseURL string `mapstructure:"base_url"`
+	APIKey  string `mapstructure:"api_key"`
 }
 
 type AuthConfig struct {

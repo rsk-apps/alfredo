@@ -32,7 +32,7 @@ func TestEmitter_sendsEnvelopeToServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	e := webhook.New(srv.URL, "petcare", zap.NewNop())
+	e := webhook.New(srv.URL, "", "petcare", zap.NewNop())
 	e.Emit(context.Background(), "bath.recorded", map[string]string{"bath_id": "b1"})
 
 	// give goroutine time to fire
@@ -66,7 +66,7 @@ func TestEmitter_sendsEnvelopeToServer(t *testing.T) {
 }
 
 func TestEmitter_noopWhenURLEmpty(t *testing.T) {
-	e := webhook.New("", "petcare", zap.NewNop())
+	e := webhook.New("", "", "petcare", zap.NewNop())
 	// Must complete immediately (no goroutine spawned, no blocking)
 	done := make(chan struct{})
 	go func() {
@@ -91,7 +91,7 @@ func TestEmitter_logsN8nResponseBodyOnError(t *testing.T) {
 	core, logs := observer.New(zapcore.WarnLevel)
 	log := zap.New(core)
 
-	e := webhook.New(srv.URL, "petcare", log)
+	e := webhook.New(srv.URL, "", "petcare", log)
 	e.Emit(context.Background(), "bath.recorded", map[string]string{"bath_id": "b1"})
 
 	time.Sleep(50 * time.Millisecond)
@@ -121,7 +121,7 @@ func TestEmitter_debugLogsOutgoingPayload(t *testing.T) {
 	core, logs := observer.New(zapcore.DebugLevel)
 	log := zap.New(core)
 
-	e := webhook.New(srv.URL, "petcare", log)
+	e := webhook.New(srv.URL, "", "petcare", log)
 	e.Emit(context.Background(), "bath.recorded", map[string]string{"bath_id": "b1"})
 
 	time.Sleep(50 * time.Millisecond)
