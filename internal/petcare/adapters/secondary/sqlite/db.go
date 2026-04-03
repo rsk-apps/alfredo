@@ -21,6 +21,12 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("sqlite open: %w", err)
 	}
 
+	// SQLite does not support concurrent writers; a single connection prevents
+	// "database is locked" errors under concurrent request load.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(0)
+
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("sqlite pragma foreign_keys: %w", err)

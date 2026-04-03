@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -33,9 +34,12 @@ func main() {
 		log.Fatalf("config error: %v", err)
 	}
 
-	// 2. Guard: refuse to start without an API key
+	// 2. Guard: refuse to start without a sufficiently strong API key
 	if cfg.Auth.APIKey == "" {
 		log.Fatal("APP_AUTH_API_KEY must be set — server refuses to start without authentication")
+	}
+	if len(cfg.Auth.APIKey) < 32 {
+		log.Fatal("APP_AUTH_API_KEY must be at least 32 characters — use a cryptographically random value")
 	}
 
 	// 3. Init Zap logger with configurable level
@@ -90,6 +94,21 @@ func main() {
 	e.HidePort = true
 	e.Use(petmw.RequestLogger(zapLogger))
 	e.Use(echomw.Recover())
+	e.Use(echomw.BodyLimit("1M"))
+
+	// Custom error handler: return consistent JSON and avoid leaking internal details.
+	e.HTTPErrorHandler = func(err error, c echo.Context) {
+		code := http.StatusInternalServerError
+		msg := "internal_error"
+		var he *echo.HTTPError
+		if errors.As(err, &he) {
+			code = he.Code
+			msg = http.StatusText(he.Code)
+		}
+		if !c.Response().Committed {
+			_ = c.JSON(code, map[string]string{"error": msg})
+		}
+	}
 
 	// 12. Public routes — no auth (health checks from Traefik/Docker)
 	public := e.Group("/api/v1")
@@ -106,8 +125,11 @@ func main() {
 	zapLogger.Info("alfredo starting", zap.String("addr", addr), zap.String("version", version))
 
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: e,
+		Addr:         addr,
+		Handler:      e,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	go func() {
@@ -126,4 +148,5 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		zapLogger.Error("shutdown error", zap.Error(err))
 	}
+	emitter.Wait() // drain in-flight webhook goroutines before exit
 }

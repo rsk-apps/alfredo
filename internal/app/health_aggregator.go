@@ -26,7 +26,9 @@ func (h *HealthAggregator) Check(ctx context.Context) health.HealthResult {
 
 	for name, checker := range h.checkers {
 		if err := checker.Ping(ctx); err != nil {
-			deps[name] = health.DependencyStatus{Status: "down", Error: err.Error()}
+			// Return a generic error string to avoid leaking internal details
+			// (e.g. DB file paths) on the unauthenticated /health endpoint.
+			deps[name] = health.DependencyStatus{Status: "down", Error: "unavailable"}
 			allHealthy = false
 		} else {
 			deps[name] = health.DependencyStatus{Status: "up"}

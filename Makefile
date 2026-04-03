@@ -6,8 +6,7 @@ LDFLAGS := -ldflags "-X main.version=$(VERSION)"
 
 run: build
 	@if [ -f .env ]; then set -a && . ./.env && set +a; fi; \
-	$(BINARY) & echo $$! > alfredo.pid; \
-	echo "alfredo started (PID $$(cat alfredo.pid))"
+	$(BINARY)
 
 build:
 	go build $(LDFLAGS) -o $(BINARY) ./cmd/server
@@ -23,12 +22,3 @@ tidy:
 
 generate:
 	go generate ./...
-
-stop:
-	@if [ -f alfredo.pid ]; then \
-		kill $$(cat alfredo.pid) 2>/dev/null || true; \
-		rm alfredo.pid; \
-		echo "alfredo stopped."; \
-	else \
-		echo "No alfredo.pid found."; \
-	fi
