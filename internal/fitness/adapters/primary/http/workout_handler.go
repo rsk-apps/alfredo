@@ -105,8 +105,8 @@ func (h *WorkoutHandler) IngestWorkoutBatch(c echo.Context) error {
 	}
 	var workouts []domain.Workout
 	for _, req := range reqs {
-		if err := validate.Struct(req); err != nil {
-			return c.JSON(http.StatusBadRequest, newErrorResponse("validation_failed", "One or more workouts failed validation", nil))
+		if !validateRequest(c, &req) {
+			return nil
 		}
 		w, err := parseWorkoutRequest(req)
 		if err != nil {
