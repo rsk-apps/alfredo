@@ -1,0 +1,19 @@
+meta {
+  name: Get Workout
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/fitness/workouts/:id
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+params:path {
+  id: {{workoutId}}
+}

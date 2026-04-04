@@ -1,0 +1,39 @@
+meta {
+  name: Ingest Workout Batch
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/fitness/workouts/batch
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+body:json {
+  [
+    {
+      "external_id": "apple-workout-batch-001",
+      "type": "run",
+      "started_at": "2026-04-01T07:00:00Z",
+      "duration_seconds": 2700,
+      "active_calories": 390.0,
+      "total_calories": 460.0,
+      "distance_meters": 7500.0,
+      "source": "apple_fitness"
+    },
+    {
+      "external_id": "apple-workout-batch-002",
+      "type": "hiit",
+      "started_at": "2026-04-03T18:00:00Z",
+      "duration_seconds": 1800,
+      "active_calories": 310.0,
+      "total_calories": 380.0,
+      "source": "apple_fitness"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+meta {
+  name: Update Goal
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/v1/fitness/goals/:id
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+params:path {
+  id: {{goalId}}
+}
+
+body:json {
+  {
+    "deadline": "2026-07-31"
+  }
+}
