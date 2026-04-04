@@ -1,0 +1,132 @@
+// internal/fitness/adapters/primary/http/body_snapshot_handler.go
+package http
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
+
+	"github.com/rafaelsoares/alfredo/internal/fitness/domain"
+	fitnesssvc "github.com/rafaelsoares/alfredo/internal/fitness/service"
+	"github.com/rafaelsoares/alfredo/internal/logger"
+)
+
+type BodySnapshotServicer interface {
+	CreateSnapshot(ctx context.Context, in fitnesssvc.CreateBodySnapshotInput) (*domain.BodySnapshot, error)
+	GetSnapshot(ctx context.Context, id string) (*domain.BodySnapshot, error)
+	ListSnapshots(ctx context.Context, from, to *time.Time) ([]domain.BodySnapshot, error)
+	DeleteSnapshot(ctx context.Context, id string) error
+}
+
+type BodySnapshotHandler struct{ svc BodySnapshotServicer }
+
+func NewBodySnapshotHandler(svc BodySnapshotServicer) *BodySnapshotHandler {
+	return &BodySnapshotHandler{svc: svc}
+}
+
+func (h *BodySnapshotHandler) Register(g *echo.Group) {
+	g.POST("/fitness/body-snapshots", h.CreateSnapshot)
+	g.GET("/fitness/body-snapshots", h.ListSnapshots)
+	g.GET("/fitness/body-snapshots/:id", h.GetSnapshot)
+	g.DELETE("/fitness/body-snapshots/:id", h.DeleteSnapshot)
+}
+
+func (h *BodySnapshotHandler) CreateSnapshot(c echo.Context) error {
+	var req struct {
+		Date       string   `json:"date"         validate:"required"`
+		WeightKg   *float64 `json:"weight_kg"    validate:"omitempty,gt=0"`
+		WaistCm    *float64 `json:"waist_cm"     validate:"omitempty,gt=0"`
+		HipCm      *float64 `json:"hip_cm"       validate:"omitempty,gt=0"`
+		NeckCm     *float64 `json:"neck_cm"      validate:"omitempty,gt=0"`
+		BodyFatPct *float64 `json:"body_fat_pct" validate:"omitempty,gt=0,lte=100"`
+		PhotoPath  *string  `json:"photo_path"`
+	}
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, newErrorResponse("invalid_request_body", "Request body is invalid JSON", nil))
+	}
+	if !validateRequest(c, &req) {
+		return nil
+	}
+	date, err := time.Parse("2006-01-02", req.Date)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, newErrorResponse("validation_failed", "Request validation failed",
+			[]fieldError{{Field: "date", Issue: "must be YYYY-MM-DD format"}}))
+	}
+	s, err := h.svc.CreateSnapshot(c.Request().Context(), fitnesssvc.CreateBodySnapshotInput{
+		Date: date, WeightKg: req.WeightKg, WaistCm: req.WaistCm,
+		HipCm: req.HipCm, NeckCm: req.NeckCm, BodyFatPct: req.BodyFatPct, PhotoPath: req.PhotoPath,
+	})
+	if err != nil {
+		return mapError(c, err)
+	}
+	logger.FromEcho(c).Info("body snapshot created", zap.String("snapshot_id", s.ID))
+	return c.JSON(http.StatusCreated, toBodySnapshotResponse(*s))
+}
+
+func (h *BodySnapshotHandler) ListSnapshots(c echo.Context) error {
+	from, to := parseDateRangeParams(c)
+	snapshots, err := h.svc.ListSnapshots(c.Request().Context(), from, to)
+	if err != nil {
+		return mapError(c, err)
+	}
+	resp := make([]bodySnapshotResponse, 0, len(snapshots))
+	for _, s := range snapshots {
+		resp = append(resp, toBodySnapshotResponse(s))
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *BodySnapshotHandler) GetSnapshot(c echo.Context) error {
+	id, ok := parseUUID(c, "id")
+	if !ok {
+		return nil
+	}
+	s, err := h.svc.GetSnapshot(c.Request().Context(), id)
+	if err != nil {
+		return mapError(c, err)
+	}
+	return c.JSON(http.StatusOK, toBodySnapshotResponse(*s))
+}
+
+func (h *BodySnapshotHandler) DeleteSnapshot(c echo.Context) error {
+	id, ok := parseUUID(c, "id")
+	if !ok {
+		return nil
+	}
+	if err := h.svc.DeleteSnapshot(c.Request().Context(), id); err != nil {
+		return mapError(c, err)
+	}
+	logger.FromEcho(c).Info("body snapshot deleted", zap.String("snapshot_id", id))
+	return c.NoContent(http.StatusNoContent)
+}
+
+// --- response types ---
+
+type bodySnapshotResponse struct {
+	ID         string   `json:"id"`
+	Date       string   `json:"date"`
+	WeightKg   *float64 `json:"weight_kg,omitempty"`
+	WaistCm    *float64 `json:"waist_cm,omitempty"`
+	HipCm      *float64 `json:"hip_cm,omitempty"`
+	NeckCm     *float64 `json:"neck_cm,omitempty"`
+	BodyFatPct *float64 `json:"body_fat_pct,omitempty"`
+	PhotoPath  *string  `json:"photo_path,omitempty"`
+	CreatedAt  string   `json:"created_at"`
+}
+
+func toBodySnapshotResponse(s domain.BodySnapshot) bodySnapshotResponse {
+	return bodySnapshotResponse{
+		ID:         s.ID,
+		Date:       s.Date.Format("2006-01-02"),
+		WeightKg:   s.WeightKg,
+		WaistCm:    s.WaistCm,
+		HipCm:      s.HipCm,
+		NeckCm:     s.NeckCm,
+		BodyFatPct: s.BodyFatPct,
+		PhotoPath:  s.PhotoPath,
+		CreatedAt:  s.CreatedAt.Format(time.RFC3339),
+	}
+}
