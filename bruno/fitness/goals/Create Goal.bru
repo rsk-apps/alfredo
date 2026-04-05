@@ -1,0 +1,25 @@
+meta {
+  name: Create Goal
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/fitness/goals
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+body:json {
+  {
+    "name": "Run a sub-50min 10K",
+    "description": "Improve 10K time to under 50 minutes",
+    "target_value": 50.0,
+    "target_unit": "min",
+    "deadline": "2026-06-30"
+  }
+}

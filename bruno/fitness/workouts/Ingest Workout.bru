@@ -1,0 +1,36 @@
+meta {
+  name: Ingest Workout
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/fitness/workouts
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+body:json {
+  {
+    "external_id": "apple-workout-abc123",
+    "type": "run",
+    "started_at": "2026-04-04T07:00:00Z",
+    "duration_seconds": 3600,
+    "active_calories": 520.0,
+    "total_calories": 620.0,
+    "distance_meters": 10000.0,
+    "avg_pace_sec_per_km": 360.0,
+    "avg_heart_rate": 155.0,
+    "max_heart_rate": 178.0,
+    "hr_zone1_pct": 5.0,
+    "hr_zone2_pct": 20.0,
+    "hr_zone3_pct": 40.0,
+    "hr_zone4_pct": 30.0,
+    "hr_zone5_pct": 5.0,
+    "source": "apple_fitness"
+  }
+}

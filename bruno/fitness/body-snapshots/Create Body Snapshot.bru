@@ -1,0 +1,26 @@
+meta {
+  name: Create Body Snapshot
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/fitness/body-snapshots
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+body:json {
+  {
+    "date": "2026-04-04",
+    "weight_kg": 81.5,
+    "waist_cm": 88.0,
+    "hip_cm": 98.0,
+    "neck_cm": 39.0,
+    "body_fat_pct": 18.5
+  }
+}

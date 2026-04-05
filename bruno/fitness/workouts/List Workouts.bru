@@ -1,0 +1,20 @@
+meta {
+  name: List Workouts
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/fitness/workouts
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+params:query {
+  from:
+  to:
+}

@@ -19,6 +19,12 @@ internal/
     service/                — pure CRUD services (no side-effects to other domains)
     adapters/primary/http/  — HTTP handlers: pet, vaccine_handler
     adapters/secondary/sqlite/ — SQLite repositories + migrations (001)
+  fitness/                  — fitness domain
+    domain/                 — Profile, Workout, BodySnapshot, Goal types
+    port/                   — repository interfaces only
+    service/                — pure CRUD services (no side-effects to other domains)
+    adapters/primary/http/  — HTTP handlers: profile, workout, body_snapshot, goal handlers
+    adapters/secondary/sqlite/ — SQLite repositories + migrations
   app/                      — Application Services (Use Cases) — cross-domain orchestration
     vaccine_usecase.go      — vaccine → webhook events
     pet_usecase.go          — pet CRUD pass-through
@@ -50,6 +56,24 @@ internal/
 | `GET /api/v1/pets/:id/treatments` | TreatmentHandler |
 | `GET /api/v1/pets/:id/treatments/:tid` | TreatmentHandler |
 | `DELETE /api/v1/pets/:id/treatments/:tid` | TreatmentHandler |
+| `GET /api/v1/fitness/profile` | FitnessProfileHandler |
+| `POST /api/v1/fitness/profile` | FitnessProfileHandler |
+| `PUT /api/v1/fitness/profile` | FitnessProfileHandler |
+| `POST /api/v1/fitness/workouts` | FitnessWorkoutHandler |
+| `POST /api/v1/fitness/workouts/batch` | FitnessWorkoutHandler |
+| `GET /api/v1/fitness/workouts` | FitnessWorkoutHandler |
+| `GET /api/v1/fitness/workouts/:id` | FitnessWorkoutHandler |
+| `DELETE /api/v1/fitness/workouts/:id` | FitnessWorkoutHandler |
+| `POST /api/v1/fitness/body-snapshots` | FitnessBodySnapshotHandler |
+| `GET /api/v1/fitness/body-snapshots` | FitnessBodySnapshotHandler |
+| `GET /api/v1/fitness/body-snapshots/:id` | FitnessBodySnapshotHandler |
+| `DELETE /api/v1/fitness/body-snapshots/:id` | FitnessBodySnapshotHandler |
+| `POST /api/v1/fitness/goals` | FitnessGoalHandler |
+| `GET /api/v1/fitness/goals` | FitnessGoalHandler |
+| `GET /api/v1/fitness/goals/:id` | FitnessGoalHandler |
+| `PUT /api/v1/fitness/goals/:id` | FitnessGoalHandler |
+| `DELETE /api/v1/fitness/goals/:id` | FitnessGoalHandler |
+| `POST /api/v1/fitness/goals/:id/achieve` | FitnessGoalHandler |
 
 ## API Collection
 

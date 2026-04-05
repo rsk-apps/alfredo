@@ -1,0 +1,25 @@
+meta {
+  name: Create Profile
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/fitness/profile
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+body:json {
+  {
+    "first_name": "Rafael",
+    "last_name": "Soares",
+    "birth_date": "1990-01-15",
+    "gender": "male",
+    "height_cm": 178.0
+  }
+}

@@ -1,4 +1,4 @@
-package sqlite
+package database
 
 import (
 	"context"
@@ -7,25 +7,24 @@ import (
 	"fmt"
 	"strings"
 
-	_ "modernc.org/sqlite" // register sqlite3 driver
+	_ "modernc.org/sqlite"
 )
 
-//go:embed migrations/001_initial.sql
+//go:embed migrations/petcare/001_initial.sql
 var migration001 string
 
-//go:embed migrations/002_treatments.sql
+//go:embed migrations/petcare/002_treatments.sql
 var migration002 string
 
-// Open opens (or creates) the SQLite database at path, enables foreign keys,
-// and runs the versioned migration runner.
+//go:embed migrations/fitness/003_fitness.sql
+var migration003 string
+
 func Open(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite open: %w", err)
 	}
 
-	// SQLite does not support concurrent writers; a single connection prevents
-	// "database is locked" errors under concurrent request load.
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(0)
@@ -54,6 +53,7 @@ func migrate(db *sql.DB) error {
 	}{
 		{"001_initial", migration001},
 		{"002_treatments", migration002},
+		{"003_fitness", migration003},
 	}
 
 	for _, m := range migrations {
@@ -86,17 +86,18 @@ func migrate(db *sql.DB) error {
 	return nil
 }
 
-// Checker implements port.DBHealthChecker using a sql.DB ping.
-type Checker struct{ db *sql.DB }
+type Checker struct {
+	db *sql.DB
+}
 
-func NewChecker(db *sql.DB) *Checker { return &Checker{db: db} }
+func NewChecker(db *sql.DB) *Checker {
+	return &Checker{db: db}
+}
 
 func (c *Checker) Ping(ctx context.Context) error {
 	return c.db.PingContext(ctx)
 }
 
-// splitSQL splits a SQL script on semicolons, returning non-empty trimmed statements.
-// NOTE: naive splitter — migrations must not contain semicolons inside string literals or comments.
 func splitSQL(script string) []string {
 	var out []string
 	for _, s := range strings.Split(script, ";") {

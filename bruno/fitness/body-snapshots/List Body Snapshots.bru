@@ -1,0 +1,20 @@
+meta {
+  name: List Body Snapshots
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/fitness/body-snapshots
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+params:query {
+  from:
+  to:
+}

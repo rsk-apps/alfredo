@@ -24,11 +24,6 @@ type VaccineRepository interface {
 	DeleteVaccine(ctx context.Context, petID, vaccineID string) error
 }
 
-// DBHealthChecker verifies the SQLite connection is alive.
-type DBHealthChecker interface {
-	Ping(ctx context.Context) error
-}
-
 // TreatmentRepository persists treatment records.
 type TreatmentRepository interface {
 	Create(ctx context.Context, t domain.Treatment) (*domain.Treatment, error)

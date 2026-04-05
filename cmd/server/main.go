@@ -18,9 +18,13 @@ import (
 
 	"github.com/rafaelsoares/alfredo/internal/app"
 	"github.com/rafaelsoares/alfredo/internal/config"
+	"github.com/rafaelsoares/alfredo/internal/database"
+	fitnesshttp "github.com/rafaelsoares/alfredo/internal/fitness/adapters/primary/http"
+	fitnesssqlite "github.com/rafaelsoares/alfredo/internal/fitness/adapters/secondary/sqlite"
+	fitnesssvc "github.com/rafaelsoares/alfredo/internal/fitness/service"
 	pethttp "github.com/rafaelsoares/alfredo/internal/petcare/adapters/primary/http"
 	petmw "github.com/rafaelsoares/alfredo/internal/petcare/adapters/primary/http/middleware"
-	"github.com/rafaelsoares/alfredo/internal/petcare/adapters/secondary/sqlite"
+	petcaresqlite "github.com/rafaelsoares/alfredo/internal/petcare/adapters/secondary/sqlite"
 	petsvc "github.com/rafaelsoares/alfredo/internal/petcare/service"
 	"github.com/rafaelsoares/alfredo/internal/webhook"
 )
@@ -55,8 +59,8 @@ func main() {
 	}
 	defer zapLogger.Sync() //nolint:errcheck
 
-	// 4. Open SQLite (runs migration 001)
-	db, err := sqlite.Open(cfg.Database.Path)
+	// 4. Open SQLite (runs all migrations)
+	db, err := database.Open(cfg.Database.Path)
 	if err != nil {
 		zapLogger.Fatal("sqlite open failed", zap.Error(err))
 	}
@@ -64,13 +68,20 @@ func main() {
 
 	// 5. Webhook emitter (no-op when URL is empty)
 	emitter := webhook.New(cfg.Webhook.BaseURL, cfg.Webhook.APIKey, "petcare", zapLogger)
+	fitnessEmitter := webhook.New(cfg.Webhook.BaseURL, cfg.Webhook.APIKey, "fitness", zapLogger)
 
 	// 6. Pet-care repositories
-	petRepo := sqlite.NewPetRepository(db)
-	vaccineRepo := sqlite.NewVaccineRepository(db)
-	treatmentRepo := sqlite.NewTreatmentRepository(db)
-	doseRepo := sqlite.NewDoseRepository(db)
-	dbChecker := sqlite.NewChecker(db)
+	petRepo := petcaresqlite.NewPetRepository(db)
+	vaccineRepo := petcaresqlite.NewVaccineRepository(db)
+	treatmentRepo := petcaresqlite.NewTreatmentRepository(db)
+	doseRepo := petcaresqlite.NewDoseRepository(db)
+	dbChecker := database.NewChecker(db)
+
+	// 6a. Fitness repositories
+	fitnessProfileRepo := fitnesssqlite.NewProfileRepository(db)
+	fitnessWorkoutRepo := fitnesssqlite.NewWorkoutRepository(db)
+	fitnessBodySnapshotRepo := fitnesssqlite.NewBodySnapshotRepository(db)
+	fitnessGoalRepo := fitnesssqlite.NewGoalRepository(db)
 
 	// 7. Pet-care services (pure CRUD — no side-effects)
 	petService := petsvc.NewPetService(petRepo)
@@ -78,10 +89,22 @@ func main() {
 	treatmentService := petsvc.NewTreatmentService(treatmentRepo)
 	doseService := petsvc.NewDoseService(doseRepo)
 
+	// 7a. Fitness services (pure CRUD — no side-effects)
+	fitnessProfileSvc := fitnesssvc.NewProfileService(fitnessProfileRepo)
+	fitnessWorkoutSvc := fitnesssvc.NewWorkoutService(fitnessWorkoutRepo)
+	fitnessBodySnapshotSvc := fitnesssvc.NewBodySnapshotService(fitnessBodySnapshotRepo)
+	fitnessGoalSvc := fitnesssvc.NewGoalService(fitnessGoalRepo)
+
 	// 8. Use Cases (orchestrate domain + webhook emission)
 	petUC := app.NewPetUseCase(petService, emitter)
 	vaccineUC := app.NewVaccineUseCase(vaccineService, petService, emitter, zapLogger)
 	treatmentUC := app.NewTreatmentUseCase(treatmentService, doseService, petService, emitter, zapLogger)
+
+	// 8a. Fitness use cases
+	fitnessProfileUC := app.NewFitnessProfileUseCase(fitnessProfileSvc)
+	fitnessIngestionUC := app.NewFitnessIngestionUseCase(fitnessWorkoutSvc, fitnessEmitter, zapLogger)
+	fitnessBodyUC := app.NewFitnessBodyUseCase(fitnessBodySnapshotSvc, fitnessEmitter, zapLogger)
+	fitnessGoalUC := app.NewFitnessGoalUseCase(fitnessGoalSvc, fitnessEmitter, zapLogger)
 
 	// 9. Health aggregator
 	healthAgg := app.NewHealthAggregator(map[string]app.HealthPinger{
@@ -93,6 +116,12 @@ func main() {
 	petHandler := pethttp.NewPetHandler(petUC)
 	vaccineHandler := pethttp.NewVaccineHandler(vaccineUC)
 	treatmentHandler := pethttp.NewTreatmentHandler(treatmentUC)
+
+	// 10a. Fitness HTTP handlers
+	fitnessProfileHandler := fitnesshttp.NewProfileHandler(fitnessProfileUC)
+	fitnessWorkoutHandler := fitnesshttp.NewWorkoutHandler(fitnessIngestionUC)
+	fitnessBodySnapshotHandler := fitnesshttp.NewBodySnapshotHandler(fitnessBodyUC)
+	fitnessGoalHandler := fitnesshttp.NewGoalHandler(fitnessGoalUC)
 
 	// 11. Echo instance with global middleware
 	e := echo.New()
@@ -126,6 +155,10 @@ func main() {
 	petHandler.Register(protected)
 	vaccineHandler.Register(protected)
 	treatmentHandler.Register(protected)
+	fitnessProfileHandler.Register(protected)
+	fitnessWorkoutHandler.Register(protected)
+	fitnessBodySnapshotHandler.Register(protected)
+	fitnessGoalHandler.Register(protected)
 
 	// 14. Start server with graceful shutdown
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
@@ -161,5 +194,6 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		zapLogger.Error("shutdown error", zap.Error(err))
 	}
-	emitter.Wait() // drain in-flight webhook goroutines before exit
+	emitter.Wait()        // drain petcare webhooks
+	fitnessEmitter.Wait() // drain fitness webhooks
 }

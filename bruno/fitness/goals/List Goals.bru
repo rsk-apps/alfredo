@@ -1,0 +1,15 @@
+meta {
+  name: List Goals
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/fitness/goals
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
