@@ -1,0 +1,51 @@
+meta {
+  name: Ingest Strength Workout
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/fitness/workouts
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+body:json {
+  {
+    "external_id": "manual-strength-001",
+    "type": "strength",
+    "started_at": "2026-04-10T09:00:00Z",
+    "duration_seconds": 3600,
+    "active_calories": 300.0,
+    "total_calories": 350.0,
+    "strength": {
+      "exercises": [
+        {
+          "name": "Bench Press",
+          "equipment": "barbell",
+          "order_idx": 0,
+          "sets": [
+            { "set_number": 1, "reps": 8, "weight_kg": 100.0 },
+            { "set_number": 2, "reps": 8, "weight_kg": 100.0 },
+            { "set_number": 3, "reps": 6, "weight_kg": 105.0 }
+          ]
+        },
+        {
+          "name": "Squat",
+          "equipment": "barbell",
+          "order_idx": 1,
+          "sets": [
+            { "set_number": 1, "reps": 5, "weight_kg": 140.0 },
+            { "set_number": 2, "reps": 5, "weight_kg": 140.0 },
+            { "set_number": 3, "reps": 5, "weight_kg": 140.0 }
+          ]
+        }
+      ]
+    },
+    "source": "manual"
+  }
+}
