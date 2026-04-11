@@ -31,24 +31,59 @@ func NewFitnessIngestionUseCase(
 }
 
 func (uc *FitnessIngestionUseCase) IngestWorkout(ctx context.Context, w domain.Workout) (*domain.Workout, error) {
-	saved, err := uc.workouts.Create(ctx, fitnesssvc.CreateWorkoutInput{
+	in := fitnesssvc.CreateWorkoutInput{
 		ExternalID:      w.ExternalID,
 		Type:            w.Type,
 		StartedAt:       w.StartedAt,
 		DurationSeconds: w.DurationSeconds,
 		ActiveCalories:  w.ActiveCalories,
 		TotalCalories:   w.TotalCalories,
-		DistanceMeters:  w.DistanceMeters,
-		AvgPaceSecPerKm: w.AvgPaceSecPerKm,
-		AvgHeartRate:    w.AvgHeartRate,
-		MaxHeartRate:    w.MaxHeartRate,
-		HRZone1Pct:      w.HRZone1Pct,
-		HRZone2Pct:      w.HRZone2Pct,
-		HRZone3Pct:      w.HRZone3Pct,
-		HRZone4Pct:      w.HRZone4Pct,
-		HRZone5Pct:      w.HRZone5Pct,
 		Source:          w.Source,
-	})
+	}
+
+	if w.HeartRate != nil {
+		in.HeartRate = &fitnesssvc.CreateHeartRateInput{
+			Avg:      w.HeartRate.Avg,
+			Max:      w.HeartRate.Max,
+			Zone1Pct: w.HeartRate.Zone1Pct,
+			Zone2Pct: w.HeartRate.Zone2Pct,
+			Zone3Pct: w.HeartRate.Zone3Pct,
+			Zone4Pct: w.HeartRate.Zone4Pct,
+			Zone5Pct: w.HeartRate.Zone5Pct,
+		}
+	}
+
+	if w.Cardio != nil {
+		in.Cardio = &fitnesssvc.CreateCardioInput{
+			DistanceMeters:  w.Cardio.DistanceMeters,
+			AvgPaceSecPerKm: w.Cardio.AvgPaceSecPerKm,
+		}
+	}
+
+	if w.Strength != nil {
+		exercises := make([]fitnesssvc.CreateExerciseInput, 0, len(w.Strength.Exercises))
+		for _, ex := range w.Strength.Exercises {
+			sets := make([]fitnesssvc.CreateSetInput, 0, len(ex.Sets))
+			for _, s := range ex.Sets {
+				sets = append(sets, fitnesssvc.CreateSetInput{
+					SetNumber:    s.SetNumber,
+					Reps:         s.Reps,
+					WeightKg:     s.WeightKg,
+					DurationSecs: s.DurationSecs,
+					Notes:        s.Notes,
+				})
+			}
+			exercises = append(exercises, fitnesssvc.CreateExerciseInput{
+				Name:      ex.Name,
+				Equipment: ex.Equipment,
+				OrderIdx:  ex.OrderIdx,
+				Sets:      sets,
+			})
+		}
+		in.Strength = &fitnesssvc.CreateStrengthInput{Exercises: exercises}
+	}
+
+	saved, err := uc.workouts.Create(ctx, in)
 	if err != nil {
 		return nil, err
 	}

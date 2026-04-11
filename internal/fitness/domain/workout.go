@@ -11,15 +11,28 @@ type Workout struct {
 	DurationSeconds int
 	ActiveCalories  float64
 	TotalCalories   float64
-	DistanceMeters  *float64
-	AvgPaceSecPerKm *float64
-	AvgHeartRate    *float64
-	MaxHeartRate    *float64
-	HRZone1Pct      *float64
-	HRZone2Pct      *float64
-	HRZone3Pct      *float64
-	HRZone4Pct      *float64
-	HRZone5Pct      *float64
+	HeartRate       *WorkoutHeartRate // nil if no HR data recorded
+	Cardio          *CardioData       // nil for non-cardio workouts
+	Strength        *StrengthData     // nil for non-strength workouts
 	Source          string
 	CreatedAt       time.Time
+}
+
+type WorkoutHeartRate struct {
+	Avg      *float64
+	Max      *float64
+	Zone1Pct *float64
+	Zone2Pct *float64
+	Zone3Pct *float64
+	Zone4Pct *float64
+	Zone5Pct *float64
+}
+
+type CardioData struct {
+	DistanceMeters  *float64
+	AvgPaceSecPerKm *float64
+}
+
+type StrengthData struct {
+	Exercises []WorkoutExercise
 }

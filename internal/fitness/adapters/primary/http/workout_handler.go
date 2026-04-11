@@ -33,23 +33,53 @@ func (h *WorkoutHandler) Register(g *echo.Group) {
 	g.DELETE("/fitness/workouts/:id", h.DeleteWorkout)
 }
 
-type workoutRequest struct {
-	ExternalID      string   `json:"external_id"        validate:"required"`
-	Type            string   `json:"type"               validate:"required,min=1,max=50"`
-	StartedAt       string   `json:"started_at"         validate:"required"`
-	DurationSeconds int      `json:"duration_seconds"   validate:"required,gt=0"`
-	ActiveCalories  float64  `json:"active_calories"    validate:"gte=0"`
-	TotalCalories   float64  `json:"total_calories"     validate:"gte=0"`
+// --- request types ---
+
+type heartRateRequest struct {
+	Avg      *float64 `json:"avg"`
+	Max      *float64 `json:"max"`
+	Zone1Pct *float64 `json:"zone1_pct"`
+	Zone2Pct *float64 `json:"zone2_pct"`
+	Zone3Pct *float64 `json:"zone3_pct"`
+	Zone4Pct *float64 `json:"zone4_pct"`
+	Zone5Pct *float64 `json:"zone5_pct"`
+}
+
+type cardioRequest struct {
 	DistanceMeters  *float64 `json:"distance_meters"`
 	AvgPaceSecPerKm *float64 `json:"avg_pace_sec_per_km"`
-	AvgHeartRate    *float64 `json:"avg_heart_rate"`
-	MaxHeartRate    *float64 `json:"max_heart_rate"`
-	HRZone1Pct      *float64 `json:"hr_zone1_pct"`
-	HRZone2Pct      *float64 `json:"hr_zone2_pct"`
-	HRZone3Pct      *float64 `json:"hr_zone3_pct"`
-	HRZone4Pct      *float64 `json:"hr_zone4_pct"`
-	HRZone5Pct      *float64 `json:"hr_zone5_pct"`
-	Source          string   `json:"source"             validate:"required,min=1,max=50"`
+}
+
+type setRequest struct {
+	SetNumber    int      `json:"set_number"    validate:"required,gt=0"`
+	Reps         *int     `json:"reps"`
+	WeightKg     *float64 `json:"weight_kg"`
+	DurationSecs *int     `json:"duration_secs"`
+	Notes        *string  `json:"notes"`
+}
+
+type exerciseRequest struct {
+	Name      string       `json:"name"      validate:"required,min=1"`
+	Equipment *string      `json:"equipment"`
+	OrderIdx  int          `json:"order_idx"`
+	Sets      []setRequest `json:"sets"      validate:"required,min=1,dive"`
+}
+
+type strengthRequest struct {
+	Exercises []exerciseRequest `json:"exercises" validate:"required,min=1,dive"`
+}
+
+type workoutRequest struct {
+	ExternalID      string           `json:"external_id"      validate:"required"`
+	Type            string           `json:"type"             validate:"required,min=1,max=50"`
+	StartedAt       string           `json:"started_at"       validate:"required"`
+	DurationSeconds int              `json:"duration_seconds" validate:"required,gt=0"`
+	ActiveCalories  float64          `json:"active_calories"  validate:"gte=0"`
+	TotalCalories   float64          `json:"total_calories"   validate:"gte=0"`
+	HeartRate       *heartRateRequest `json:"heart_rate"`
+	Cardio          *cardioRequest   `json:"cardio"`
+	Strength        *strengthRequest `json:"strength"`
+	Source          string           `json:"source"           validate:"required,min=1,max=50"`
 }
 
 func parseWorkoutRequest(req workoutRequest) (domain.Workout, error) {
@@ -57,24 +87,55 @@ func parseWorkoutRequest(req workoutRequest) (domain.Workout, error) {
 	if err != nil {
 		return domain.Workout{}, err
 	}
-	return domain.Workout{
+	w := domain.Workout{
 		ExternalID:      req.ExternalID,
 		Type:            req.Type,
 		StartedAt:       startedAt,
 		DurationSeconds: req.DurationSeconds,
 		ActiveCalories:  req.ActiveCalories,
 		TotalCalories:   req.TotalCalories,
-		DistanceMeters:  req.DistanceMeters,
-		AvgPaceSecPerKm: req.AvgPaceSecPerKm,
-		AvgHeartRate:    req.AvgHeartRate,
-		MaxHeartRate:    req.MaxHeartRate,
-		HRZone1Pct:      req.HRZone1Pct,
-		HRZone2Pct:      req.HRZone2Pct,
-		HRZone3Pct:      req.HRZone3Pct,
-		HRZone4Pct:      req.HRZone4Pct,
-		HRZone5Pct:      req.HRZone5Pct,
 		Source:          req.Source,
-	}, nil
+	}
+	if req.HeartRate != nil {
+		w.HeartRate = &domain.WorkoutHeartRate{
+			Avg:      req.HeartRate.Avg,
+			Max:      req.HeartRate.Max,
+			Zone1Pct: req.HeartRate.Zone1Pct,
+			Zone2Pct: req.HeartRate.Zone2Pct,
+			Zone3Pct: req.HeartRate.Zone3Pct,
+			Zone4Pct: req.HeartRate.Zone4Pct,
+			Zone5Pct: req.HeartRate.Zone5Pct,
+		}
+	}
+	if req.Cardio != nil {
+		w.Cardio = &domain.CardioData{
+			DistanceMeters:  req.Cardio.DistanceMeters,
+			AvgPaceSecPerKm: req.Cardio.AvgPaceSecPerKm,
+		}
+	}
+	if req.Strength != nil {
+		exercises := make([]domain.WorkoutExercise, 0, len(req.Strength.Exercises))
+		for _, er := range req.Strength.Exercises {
+			sets := make([]domain.WorkoutSet, 0, len(er.Sets))
+			for _, sr := range er.Sets {
+				sets = append(sets, domain.WorkoutSet{
+					SetNumber:    sr.SetNumber,
+					Reps:         sr.Reps,
+					WeightKg:     sr.WeightKg,
+					DurationSecs: sr.DurationSecs,
+					Notes:        sr.Notes,
+				})
+			}
+			exercises = append(exercises, domain.WorkoutExercise{
+				Name:      er.Name,
+				Equipment: er.Equipment,
+				OrderIdx:  er.OrderIdx,
+				Sets:      sets,
+			})
+		}
+		w.Strength = &domain.StrengthData{Exercises: exercises}
+	}
+	return w, nil
 }
 
 func (h *WorkoutHandler) IngestWorkout(c echo.Context) error {
@@ -182,29 +243,59 @@ func parseDateRangeParams(c echo.Context) (*time.Time, *time.Time) {
 
 // --- response types ---
 
-type workoutResponse struct {
-	ID              string   `json:"id"`
-	ExternalID      string   `json:"external_id"`
-	Type            string   `json:"type"`
-	StartedAt       string   `json:"started_at"`
-	DurationSeconds int      `json:"duration_seconds"`
-	ActiveCalories  float64  `json:"active_calories"`
-	TotalCalories   float64  `json:"total_calories"`
+type heartRateResponse struct {
+	Avg      *float64 `json:"avg,omitempty"`
+	Max      *float64 `json:"max,omitempty"`
+	Zone1Pct *float64 `json:"zone1_pct,omitempty"`
+	Zone2Pct *float64 `json:"zone2_pct,omitempty"`
+	Zone3Pct *float64 `json:"zone3_pct,omitempty"`
+	Zone4Pct *float64 `json:"zone4_pct,omitempty"`
+	Zone5Pct *float64 `json:"zone5_pct,omitempty"`
+}
+
+type cardioResponse struct {
 	DistanceMeters  *float64 `json:"distance_meters,omitempty"`
 	AvgPaceSecPerKm *float64 `json:"avg_pace_sec_per_km,omitempty"`
-	AvgHeartRate    *float64 `json:"avg_heart_rate,omitempty"`
-	MaxHeartRate    *float64 `json:"max_heart_rate,omitempty"`
-	HRZone1Pct      *float64 `json:"hr_zone1_pct,omitempty"`
-	HRZone2Pct      *float64 `json:"hr_zone2_pct,omitempty"`
-	HRZone3Pct      *float64 `json:"hr_zone3_pct,omitempty"`
-	HRZone4Pct      *float64 `json:"hr_zone4_pct,omitempty"`
-	HRZone5Pct      *float64 `json:"hr_zone5_pct,omitempty"`
-	Source          string   `json:"source"`
-	CreatedAt       string   `json:"created_at"`
+}
+
+type setResponse struct {
+	ID           string   `json:"id"`
+	SetNumber    int      `json:"set_number"`
+	Reps         *int     `json:"reps,omitempty"`
+	WeightKg     *float64 `json:"weight_kg,omitempty"`
+	DurationSecs *int     `json:"duration_secs,omitempty"`
+	Notes        *string  `json:"notes,omitempty"`
+}
+
+type exerciseResponse struct {
+	ID        string        `json:"id"`
+	Name      string        `json:"name"`
+	Equipment *string       `json:"equipment,omitempty"`
+	OrderIdx  int           `json:"order_idx"`
+	Sets      []setResponse `json:"sets"`
+}
+
+type strengthResponse struct {
+	Exercises []exerciseResponse `json:"exercises"`
+}
+
+type workoutResponse struct {
+	ID              string             `json:"id"`
+	ExternalID      string             `json:"external_id"`
+	Type            string             `json:"type"`
+	StartedAt       string             `json:"started_at"`
+	DurationSeconds int                `json:"duration_seconds"`
+	ActiveCalories  float64            `json:"active_calories"`
+	TotalCalories   float64            `json:"total_calories"`
+	HeartRate       *heartRateResponse `json:"heart_rate,omitempty"`
+	Cardio          *cardioResponse    `json:"cardio,omitempty"`
+	Strength        *strengthResponse  `json:"strength,omitempty"`
+	Source          string             `json:"source"`
+	CreatedAt       string             `json:"created_at"`
 }
 
 func toWorkoutResponse(w domain.Workout) workoutResponse {
-	return workoutResponse{
+	resp := workoutResponse{
 		ID:              w.ID,
 		ExternalID:      w.ExternalID,
 		Type:            w.Type,
@@ -212,16 +303,49 @@ func toWorkoutResponse(w domain.Workout) workoutResponse {
 		DurationSeconds: w.DurationSeconds,
 		ActiveCalories:  w.ActiveCalories,
 		TotalCalories:   w.TotalCalories,
-		DistanceMeters:  w.DistanceMeters,
-		AvgPaceSecPerKm: w.AvgPaceSecPerKm,
-		AvgHeartRate:    w.AvgHeartRate,
-		MaxHeartRate:    w.MaxHeartRate,
-		HRZone1Pct:      w.HRZone1Pct,
-		HRZone2Pct:      w.HRZone2Pct,
-		HRZone3Pct:      w.HRZone3Pct,
-		HRZone4Pct:      w.HRZone4Pct,
-		HRZone5Pct:      w.HRZone5Pct,
 		Source:          w.Source,
 		CreatedAt:       w.CreatedAt.Format(time.RFC3339),
 	}
+	if w.HeartRate != nil {
+		resp.HeartRate = &heartRateResponse{
+			Avg:      w.HeartRate.Avg,
+			Max:      w.HeartRate.Max,
+			Zone1Pct: w.HeartRate.Zone1Pct,
+			Zone2Pct: w.HeartRate.Zone2Pct,
+			Zone3Pct: w.HeartRate.Zone3Pct,
+			Zone4Pct: w.HeartRate.Zone4Pct,
+			Zone5Pct: w.HeartRate.Zone5Pct,
+		}
+	}
+	if w.Cardio != nil {
+		resp.Cardio = &cardioResponse{
+			DistanceMeters:  w.Cardio.DistanceMeters,
+			AvgPaceSecPerKm: w.Cardio.AvgPaceSecPerKm,
+		}
+	}
+	if w.Strength != nil {
+		exercises := make([]exerciseResponse, 0, len(w.Strength.Exercises))
+		for _, ex := range w.Strength.Exercises {
+			sets := make([]setResponse, 0, len(ex.Sets))
+			for _, s := range ex.Sets {
+				sets = append(sets, setResponse{
+					ID:           s.ID,
+					SetNumber:    s.SetNumber,
+					Reps:         s.Reps,
+					WeightKg:     s.WeightKg,
+					DurationSecs: s.DurationSecs,
+					Notes:        s.Notes,
+				})
+			}
+			exercises = append(exercises, exerciseResponse{
+				ID:        ex.ID,
+				Name:      ex.Name,
+				Equipment: ex.Equipment,
+				OrderIdx:  ex.OrderIdx,
+				Sets:      sets,
+			})
+		}
+		resp.Strength = &strengthResponse{Exercises: exercises}
+	}
+	return resp
 }

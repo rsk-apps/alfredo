@@ -74,3 +74,93 @@ func TestWorkoutService_Create_PropagatesDuplicateError(t *testing.T) {
 		t.Errorf("got %v, want ErrAlreadyExists", err)
 	}
 }
+
+func TestWorkoutService_Create_WithExercises(t *testing.T) {
+	svc := service.NewWorkoutService(&mockWorkoutRepo{})
+	reps := 8
+	weight := 100.0
+	w, err := svc.Create(context.Background(), service.CreateWorkoutInput{
+		ExternalID: "s001", Type: "strength", Source: "manual",
+		StartedAt: time.Now(), DurationSeconds: 3600, ActiveCalories: 300, TotalCalories: 350,
+		Strength: &service.CreateStrengthInput{
+			Exercises: []service.CreateExerciseInput{
+				{
+					Name:     "Bench Press",
+					OrderIdx: 0,
+					Sets: []service.CreateSetInput{
+						{SetNumber: 1, Reps: &reps, WeightKg: &weight},
+						{SetNumber: 2, Reps: &reps, WeightKg: &weight},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if w.Strength == nil {
+		t.Fatal("expected Strength to be set")
+	}
+	if len(w.Strength.Exercises) != 1 {
+		t.Fatalf("expected 1 exercise, got %d", len(w.Strength.Exercises))
+	}
+	ex := w.Strength.Exercises[0]
+	if ex.ID == "" {
+		t.Error("expected exercise ID to be assigned")
+	}
+	if ex.WorkoutID != w.ID {
+		t.Errorf("exercise WorkoutID %q != workout ID %q", ex.WorkoutID, w.ID)
+	}
+	if len(ex.Sets) != 2 {
+		t.Fatalf("expected 2 sets, got %d", len(ex.Sets))
+	}
+	for i, s := range ex.Sets {
+		if s.ID == "" {
+			t.Errorf("set %d: expected ID to be assigned", i)
+		}
+		if s.ExerciseID != ex.ID {
+			t.Errorf("set %d: ExerciseID %q != exercise ID %q", i, s.ExerciseID, ex.ID)
+		}
+	}
+}
+
+func TestWorkoutService_Create_ExerciseMissingName(t *testing.T) {
+	svc := service.NewWorkoutService(&mockWorkoutRepo{})
+	reps := 5
+	_, err := svc.Create(context.Background(), service.CreateWorkoutInput{
+		ExternalID: "s002", Type: "strength", Source: "manual",
+		StartedAt: time.Now(), DurationSeconds: 1800, ActiveCalories: 200, TotalCalories: 250,
+		Strength: &service.CreateStrengthInput{
+			Exercises: []service.CreateExerciseInput{
+				{
+					Name:     "",
+					OrderIdx: 0,
+					Sets:     []service.CreateSetInput{{SetNumber: 1, Reps: &reps}},
+				},
+			},
+		},
+	})
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Errorf("got %v, want ErrValidation for missing exercise name", err)
+	}
+}
+
+func TestWorkoutService_Create_ExerciseMissingSets(t *testing.T) {
+	svc := service.NewWorkoutService(&mockWorkoutRepo{})
+	_, err := svc.Create(context.Background(), service.CreateWorkoutInput{
+		ExternalID: "s003", Type: "strength", Source: "manual",
+		StartedAt: time.Now(), DurationSeconds: 1800, ActiveCalories: 200, TotalCalories: 250,
+		Strength: &service.CreateStrengthInput{
+			Exercises: []service.CreateExerciseInput{
+				{
+					Name:     "Squat",
+					OrderIdx: 0,
+					Sets:     []service.CreateSetInput{},
+				},
+			},
+		},
+	})
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Errorf("got %v, want ErrValidation for missing sets", err)
+	}
+}
