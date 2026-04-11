@@ -30,6 +30,7 @@ type FitnessBodySnapshotServicer interface {
 	GetByID(ctx context.Context, id string) (*domain.BodySnapshot, error)
 	List(ctx context.Context, from, to *time.Time) ([]domain.BodySnapshot, error)
 	Delete(ctx context.Context, id string) error
+	CurrentBodyState(ctx context.Context) (*domain.BodySnapshot, error)
 }
 
 // FitnessGoalServicer is the narrow interface consumed by FitnessGoalUseCase.

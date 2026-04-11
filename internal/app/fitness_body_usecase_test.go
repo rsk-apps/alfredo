@@ -27,6 +27,9 @@ func (s *stubFitnessBodySnapshotService) List(_ context.Context, _, _ *time.Time
 	return nil, nil
 }
 func (s *stubFitnessBodySnapshotService) Delete(_ context.Context, _ string) error { return nil }
+func (s *stubFitnessBodySnapshotService) CurrentBodyState(_ context.Context) (*domain.BodySnapshot, error) {
+	return s.snapshot, nil
+}
 
 func TestFitnessBodyUseCase_CreateSnapshot_EmitsEvent(t *testing.T) {
 	spy := &spyEmitter{}

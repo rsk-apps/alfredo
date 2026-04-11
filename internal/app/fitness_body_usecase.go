@@ -52,6 +52,10 @@ func (uc *FitnessBodyUseCase) DeleteSnapshot(ctx context.Context, id string) err
 	return uc.snapshots.Delete(ctx, id)
 }
 
+func (uc *FitnessBodyUseCase) CurrentBodyState(ctx context.Context) (*domain.BodySnapshot, error) {
+	return uc.snapshots.CurrentBodyState(ctx)
+}
+
 // --- payload types ---
 
 type fitnessBodySnapshotSavedPayload struct {

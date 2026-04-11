@@ -1,0 +1,15 @@
+meta {
+  name: Get Current Body State
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/fitness/body-snapshots/current
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}

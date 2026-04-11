@@ -19,6 +19,7 @@ type BodySnapshotServicer interface {
 	GetSnapshot(ctx context.Context, id string) (*domain.BodySnapshot, error)
 	ListSnapshots(ctx context.Context, from, to *time.Time) ([]domain.BodySnapshot, error)
 	DeleteSnapshot(ctx context.Context, id string) error
+	CurrentBodyState(ctx context.Context) (*domain.BodySnapshot, error)
 }
 
 type BodySnapshotHandler struct{ svc BodySnapshotServicer }
@@ -30,6 +31,7 @@ func NewBodySnapshotHandler(svc BodySnapshotServicer) *BodySnapshotHandler {
 func (h *BodySnapshotHandler) Register(g *echo.Group) {
 	g.POST("/fitness/body-snapshots", h.CreateSnapshot)
 	g.GET("/fitness/body-snapshots", h.ListSnapshots)
+	g.GET("/fitness/body-snapshots/current", h.GetCurrentBodyState)
 	g.GET("/fitness/body-snapshots/:id", h.GetSnapshot)
 	g.DELETE("/fitness/body-snapshots/:id", h.DeleteSnapshot)
 }
@@ -111,6 +113,14 @@ func (h *BodySnapshotHandler) GetSnapshot(c echo.Context) error {
 		return nil
 	}
 	s, err := h.svc.GetSnapshot(c.Request().Context(), id)
+	if err != nil {
+		return mapError(c, err)
+	}
+	return c.JSON(http.StatusOK, toBodySnapshotResponse(*s))
+}
+
+func (h *BodySnapshotHandler) GetCurrentBodyState(c echo.Context) error {
+	s, err := h.svc.CurrentBodyState(c.Request().Context())
 	if err != nil {
 		return mapError(c, err)
 	}

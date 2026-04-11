@@ -67,6 +67,7 @@ internal/
 | `POST /api/v1/fitness/body-snapshots` | FitnessBodySnapshotHandler |
 | `GET /api/v1/fitness/body-snapshots` | FitnessBodySnapshotHandler |
 | `GET /api/v1/fitness/body-snapshots/:id` | FitnessBodySnapshotHandler |
+| `GET /api/v1/fitness/body-snapshots/current` | FitnessBodySnapshotHandler |
 | `DELETE /api/v1/fitness/body-snapshots/:id` | FitnessBodySnapshotHandler |
 | `POST /api/v1/fitness/goals` | FitnessGoalHandler |
 | `GET /api/v1/fitness/goals` | FitnessGoalHandler |

@@ -116,6 +116,28 @@ func (s *BodySnapshotService) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
+func (s *BodySnapshotService) CurrentBodyState(ctx context.Context) (*domain.BodySnapshot, error) {
+	// Grab the single most recent snapshot (tomorrow as upper bound to include today).
+	recent, err := s.repo.LatestBefore(ctx, time.Now().AddDate(0, 0, 1), 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(recent) == 0 {
+		return nil, domain.ErrNotFound
+	}
+	target := recent[0]
+
+	// Load all snapshots strictly before the target for forward-fill context.
+	history, err := s.repo.LatestBefore(ctx, target.Date, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	baseline := foldBaseline(history)
+	result := merge(baseline, target)
+	return &result, nil
+}
+
 // merge returns a new BodySnapshot where each pointer field takes override's value
 // if non-nil, falling back to base's value. Non-pointer identity fields (ID, Date,
 // CreatedAt) always come from override.
