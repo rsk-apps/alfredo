@@ -19,6 +19,9 @@ var migration002 string
 //go:embed migrations/fitness/003_fitness.sql
 var migration003 string
 
+//go:embed migrations/fitness/004_body_snapshot_measurements.sql
+var migration004 string
+
 func Open(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -54,6 +57,7 @@ func migrate(db *sql.DB) error {
 		{"001_initial", migration001},
 		{"002_treatments", migration002},
 		{"003_fitness", migration003},
+		{"004_body_snapshot_measurements", migration004},
 	}
 
 	for _, m := range migrations {

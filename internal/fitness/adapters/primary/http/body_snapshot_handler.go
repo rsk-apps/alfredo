@@ -41,8 +41,19 @@ func (h *BodySnapshotHandler) CreateSnapshot(c echo.Context) error {
 		WaistCm    *float64 `json:"waist_cm"     validate:"omitempty,gt=0"`
 		HipCm      *float64 `json:"hip_cm"       validate:"omitempty,gt=0"`
 		NeckCm     *float64 `json:"neck_cm"      validate:"omitempty,gt=0"`
+		ChestCm    *float64 `json:"chest_cm"     validate:"omitempty,gt=0"`
+		BicepsCm   *float64 `json:"biceps_cm"    validate:"omitempty,gt=0"`
+		TricepsCm  *float64 `json:"triceps_cm"   validate:"omitempty,gt=0"`
 		BodyFatPct *float64 `json:"body_fat_pct" validate:"omitempty,gt=0,lte=100"`
-		PhotoPath  *string  `json:"photo_path"`
+		// Pollock 7-site skinfold measurements (mm)
+		ChestSkinfoldMm       *float64 `json:"chest_skinfold_mm"       validate:"omitempty,gt=0"`
+		MidaxillarySkinfoldMm *float64 `json:"midaxillary_skinfold_mm" validate:"omitempty,gt=0"`
+		TricepsSkinfoldMm     *float64 `json:"triceps_skinfold_mm"     validate:"omitempty,gt=0"`
+		SubscapularSkinfoldMm *float64 `json:"subscapular_skinfold_mm" validate:"omitempty,gt=0"`
+		AbdominalSkinfoldMm   *float64 `json:"abdominal_skinfold_mm"   validate:"omitempty,gt=0"`
+		SuprailiacSkinfoldMm  *float64 `json:"suprailiac_skinfold_mm"  validate:"omitempty,gt=0"`
+		ThighSkinfoldMm       *float64 `json:"thigh_skinfold_mm"       validate:"omitempty,gt=0"`
+		PhotoPath             *string  `json:"photo_path"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, newErrorResponse("invalid_request_body", "Request body is invalid JSON", nil))
@@ -56,8 +67,23 @@ func (h *BodySnapshotHandler) CreateSnapshot(c echo.Context) error {
 			[]fieldError{{Field: "date", Issue: "must be YYYY-MM-DD format"}}))
 	}
 	s, err := h.svc.CreateSnapshot(c.Request().Context(), fitnesssvc.CreateBodySnapshotInput{
-		Date: date, WeightKg: req.WeightKg, WaistCm: req.WaistCm,
-		HipCm: req.HipCm, NeckCm: req.NeckCm, BodyFatPct: req.BodyFatPct, PhotoPath: req.PhotoPath,
+		Date:                  date,
+		WeightKg:              req.WeightKg,
+		WaistCm:               req.WaistCm,
+		HipCm:                 req.HipCm,
+		NeckCm:                req.NeckCm,
+		ChestCm:               req.ChestCm,
+		BicepsCm:              req.BicepsCm,
+		TricepsCm:             req.TricepsCm,
+		BodyFatPct:            req.BodyFatPct,
+		ChestSkinfoldMm:       req.ChestSkinfoldMm,
+		MidaxillarySkinfoldMm: req.MidaxillarySkinfoldMm,
+		TricepsSkinfoldMm:     req.TricepsSkinfoldMm,
+		SubscapularSkinfoldMm: req.SubscapularSkinfoldMm,
+		AbdominalSkinfoldMm:   req.AbdominalSkinfoldMm,
+		SuprailiacSkinfoldMm:  req.SuprailiacSkinfoldMm,
+		ThighSkinfoldMm:       req.ThighSkinfoldMm,
+		PhotoPath:             req.PhotoPath,
 	})
 	if err != nil {
 		return mapError(c, err)
@@ -128,21 +154,42 @@ type bodySnapshotResponse struct {
 	WaistCm    *float64 `json:"waist_cm,omitempty"`
 	HipCm      *float64 `json:"hip_cm,omitempty"`
 	NeckCm     *float64 `json:"neck_cm,omitempty"`
+	ChestCm    *float64 `json:"chest_cm,omitempty"`
+	BicepsCm   *float64 `json:"biceps_cm,omitempty"`
+	TricepsCm  *float64 `json:"triceps_cm,omitempty"`
 	BodyFatPct *float64 `json:"body_fat_pct,omitempty"`
-	PhotoPath  *string  `json:"photo_path,omitempty"`
-	CreatedAt  string   `json:"created_at"`
+	// Pollock 7-site skinfold measurements (mm)
+	ChestSkinfoldMm       *float64 `json:"chest_skinfold_mm,omitempty"`
+	MidaxillarySkinfoldMm *float64 `json:"midaxillary_skinfold_mm,omitempty"`
+	TricepsSkinfoldMm     *float64 `json:"triceps_skinfold_mm,omitempty"`
+	SubscapularSkinfoldMm *float64 `json:"subscapular_skinfold_mm,omitempty"`
+	AbdominalSkinfoldMm   *float64 `json:"abdominal_skinfold_mm,omitempty"`
+	SuprailiacSkinfoldMm  *float64 `json:"suprailiac_skinfold_mm,omitempty"`
+	ThighSkinfoldMm       *float64 `json:"thigh_skinfold_mm,omitempty"`
+	PhotoPath             *string  `json:"photo_path,omitempty"`
+	CreatedAt             string   `json:"created_at"`
 }
 
 func toBodySnapshotResponse(s domain.BodySnapshot) bodySnapshotResponse {
 	return bodySnapshotResponse{
-		ID:         s.ID,
-		Date:       s.Date.Format("2006-01-02"),
-		WeightKg:   s.WeightKg,
-		WaistCm:    s.WaistCm,
-		HipCm:      s.HipCm,
-		NeckCm:     s.NeckCm,
-		BodyFatPct: s.BodyFatPct,
-		PhotoPath:  s.PhotoPath,
-		CreatedAt:  s.CreatedAt.Format(time.RFC3339),
+		ID:                    s.ID,
+		Date:                  s.Date.Format("2006-01-02"),
+		WeightKg:              s.WeightKg,
+		WaistCm:               s.WaistCm,
+		HipCm:                 s.HipCm,
+		NeckCm:                s.NeckCm,
+		ChestCm:               s.ChestCm,
+		BicepsCm:              s.BicepsCm,
+		TricepsCm:             s.TricepsCm,
+		BodyFatPct:            s.BodyFatPct,
+		ChestSkinfoldMm:       s.ChestSkinfoldMm,
+		MidaxillarySkinfoldMm: s.MidaxillarySkinfoldMm,
+		TricepsSkinfoldMm:     s.TricepsSkinfoldMm,
+		SubscapularSkinfoldMm: s.SubscapularSkinfoldMm,
+		AbdominalSkinfoldMm:   s.AbdominalSkinfoldMm,
+		SuprailiacSkinfoldMm:  s.SuprailiacSkinfoldMm,
+		ThighSkinfoldMm:       s.ThighSkinfoldMm,
+		PhotoPath:             s.PhotoPath,
+		CreatedAt:             s.CreatedAt.Format(time.RFC3339),
 	}
 }
