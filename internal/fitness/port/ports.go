@@ -28,6 +28,9 @@ type BodySnapshotRepository interface {
 	Create(ctx context.Context, s domain.BodySnapshot) (*domain.BodySnapshot, error)
 	GetByID(ctx context.Context, id string) (*domain.BodySnapshot, error)
 	List(ctx context.Context, from, to *time.Time) ([]domain.BodySnapshot, error)
+	// LatestBefore returns snapshots strictly before date, ordered by date DESC.
+	// limit <= 0 means no limit.
+	LatestBefore(ctx context.Context, date time.Time, limit int) ([]domain.BodySnapshot, error)
 	Delete(ctx context.Context, id string) error
 }
 

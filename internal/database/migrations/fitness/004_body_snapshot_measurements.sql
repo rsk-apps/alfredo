@@ -1,0 +1,10 @@
+ALTER TABLE fitness_body_snapshots ADD COLUMN chest_cm              REAL;
+ALTER TABLE fitness_body_snapshots ADD COLUMN biceps_cm             REAL;
+ALTER TABLE fitness_body_snapshots ADD COLUMN triceps_cm            REAL;
+ALTER TABLE fitness_body_snapshots ADD COLUMN chest_skinfold_mm      REAL;
+ALTER TABLE fitness_body_snapshots ADD COLUMN midaxillary_skinfold_mm REAL;
+ALTER TABLE fitness_body_snapshots ADD COLUMN triceps_skinfold_mm    REAL;
+ALTER TABLE fitness_body_snapshots ADD COLUMN subscapular_skinfold_mm REAL;
+ALTER TABLE fitness_body_snapshots ADD COLUMN abdominal_skinfold_mm  REAL;
+ALTER TABLE fitness_body_snapshots ADD COLUMN suprailiac_skinfold_mm REAL;
+ALTER TABLE fitness_body_snapshots ADD COLUMN thigh_skinfold_mm      REAL
