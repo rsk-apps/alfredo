@@ -34,6 +34,9 @@ calendar.pid
 data/
 .env
 
+# Ignore files
+.ignore
+
 
 .worktrees/
 n8n

@@ -19,9 +19,6 @@ import (
 	"github.com/rafaelsoares/alfredo/internal/app"
 	"github.com/rafaelsoares/alfredo/internal/config"
 	"github.com/rafaelsoares/alfredo/internal/database"
-	fitnesshttp "github.com/rafaelsoares/alfredo/internal/fitness/adapters/primary/http"
-	fitnesssqlite "github.com/rafaelsoares/alfredo/internal/fitness/adapters/secondary/sqlite"
-	fitnesssvc "github.com/rafaelsoares/alfredo/internal/fitness/service"
 	pethttp "github.com/rafaelsoares/alfredo/internal/petcare/adapters/primary/http"
 	petmw "github.com/rafaelsoares/alfredo/internal/petcare/adapters/primary/http/middleware"
 	petcaresqlite "github.com/rafaelsoares/alfredo/internal/petcare/adapters/secondary/sqlite"
@@ -68,7 +65,6 @@ func main() {
 
 	// 5. Webhook emitter (no-op when URL is empty)
 	emitter := webhook.New(cfg.Webhook.BaseURL, cfg.Webhook.APIKey, "petcare", zapLogger)
-	fitnessEmitter := webhook.New(cfg.Webhook.BaseURL, cfg.Webhook.APIKey, "fitness", zapLogger)
 
 	// 6. Pet-care repositories
 	petRepo := petcaresqlite.NewPetRepository(db)
@@ -77,34 +73,16 @@ func main() {
 	doseRepo := petcaresqlite.NewDoseRepository(db)
 	dbChecker := database.NewChecker(db)
 
-	// 6a. Fitness repositories
-	fitnessProfileRepo := fitnesssqlite.NewProfileRepository(db)
-	fitnessWorkoutRepo := fitnesssqlite.NewWorkoutRepository(db)
-	fitnessBodySnapshotRepo := fitnesssqlite.NewBodySnapshotRepository(db)
-	fitnessGoalRepo := fitnesssqlite.NewGoalRepository(db)
-
 	// 7. Pet-care services (pure CRUD — no side-effects)
 	petService := petsvc.NewPetService(petRepo)
 	vaccineService := petsvc.NewVaccineService(vaccineRepo, petRepo)
 	treatmentService := petsvc.NewTreatmentService(treatmentRepo)
 	doseService := petsvc.NewDoseService(doseRepo)
 
-	// 7a. Fitness services (pure CRUD — no side-effects)
-	fitnessProfileSvc := fitnesssvc.NewProfileService(fitnessProfileRepo)
-	fitnessWorkoutSvc := fitnesssvc.NewWorkoutService(fitnessWorkoutRepo)
-	fitnessBodySnapshotSvc := fitnesssvc.NewBodySnapshotService(fitnessBodySnapshotRepo)
-	fitnessGoalSvc := fitnesssvc.NewGoalService(fitnessGoalRepo)
-
 	// 8. Use Cases (orchestrate domain + webhook emission)
 	petUC := app.NewPetUseCase(petService, emitter)
 	vaccineUC := app.NewVaccineUseCase(vaccineService, petService, emitter, zapLogger)
 	treatmentUC := app.NewTreatmentUseCase(treatmentService, doseService, petService, emitter, zapLogger)
-
-	// 8a. Fitness use cases
-	fitnessProfileUC := app.NewFitnessProfileUseCase(fitnessProfileSvc)
-	fitnessIngestionUC := app.NewFitnessIngestionUseCase(fitnessWorkoutSvc, fitnessEmitter, zapLogger)
-	fitnessBodyUC := app.NewFitnessBodyUseCase(fitnessBodySnapshotSvc, fitnessEmitter, zapLogger)
-	fitnessGoalUC := app.NewFitnessGoalUseCase(fitnessGoalSvc, fitnessEmitter, zapLogger)
 
 	// 9. Health aggregator
 	healthAgg := app.NewHealthAggregator(map[string]app.HealthPinger{
@@ -116,12 +94,6 @@ func main() {
 	petHandler := pethttp.NewPetHandler(petUC)
 	vaccineHandler := pethttp.NewVaccineHandler(vaccineUC)
 	treatmentHandler := pethttp.NewTreatmentHandler(treatmentUC)
-
-	// 10a. Fitness HTTP handlers
-	fitnessProfileHandler := fitnesshttp.NewProfileHandler(fitnessProfileUC)
-	fitnessWorkoutHandler := fitnesshttp.NewWorkoutHandler(fitnessIngestionUC)
-	fitnessBodySnapshotHandler := fitnesshttp.NewBodySnapshotHandler(fitnessBodyUC)
-	fitnessGoalHandler := fitnesshttp.NewGoalHandler(fitnessGoalUC)
 
 	// 11. Echo instance with global middleware
 	e := echo.New()
@@ -155,10 +127,6 @@ func main() {
 	petHandler.Register(protected)
 	vaccineHandler.Register(protected)
 	treatmentHandler.Register(protected)
-	fitnessProfileHandler.Register(protected)
-	fitnessWorkoutHandler.Register(protected)
-	fitnessBodySnapshotHandler.Register(protected)
-	fitnessGoalHandler.Register(protected)
 
 	// 14. Start server with graceful shutdown
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
@@ -194,6 +162,5 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		zapLogger.Error("shutdown error", zap.Error(err))
 	}
-	emitter.Wait()        // drain petcare webhooks
-	fitnessEmitter.Wait() // drain fitness webhooks
+	emitter.Wait() // drain petcare webhooks
 }
