@@ -109,27 +109,29 @@ func (h *VaccineHandler) DeleteVaccine(c echo.Context) error {
 // --- response types ---
 
 type vaccineResponse struct {
-	ID                    string  `json:"id"`
-	PetID                 string  `json:"pet_id"`
-	Name                  string  `json:"name"`
-	Date                  string  `json:"date"`
-	NextDueAt             *string `json:"next_due_at,omitempty"`
-	VetName               *string `json:"vet_name,omitempty"`
-	BatchNumber           *string `json:"batch_number,omitempty"`
-	Notes                 *string `json:"notes,omitempty"`
-	GoogleCalendarEventID string  `json:"google_calendar_event_id"`
+	ID                           string  `json:"id"`
+	PetID                        string  `json:"pet_id"`
+	Name                         string  `json:"name"`
+	Date                         string  `json:"date"`
+	NextDueAt                    *string `json:"next_due_at,omitempty"`
+	VetName                      *string `json:"vet_name,omitempty"`
+	BatchNumber                  *string `json:"batch_number,omitempty"`
+	Notes                        *string `json:"notes,omitempty"`
+	GoogleCalendarEventID        string  `json:"google_calendar_event_id"`
+	GoogleCalendarNextDueEventID string  `json:"google_calendar_next_due_event_id,omitempty"`
 }
 
 func toVaccineResponse(v domain.Vaccine) vaccineResponse {
 	r := vaccineResponse{
-		ID:                    v.ID,
-		PetID:                 v.PetID,
-		Name:                  v.Name,
-		Date:                  v.AdministeredAt.Format(time.RFC3339),
-		VetName:               v.VetName,
-		BatchNumber:           v.BatchNumber,
-		Notes:                 v.Notes,
-		GoogleCalendarEventID: v.GoogleCalendarEventID,
+		ID:                           v.ID,
+		PetID:                        v.PetID,
+		Name:                         v.Name,
+		Date:                         v.AdministeredAt.Format(time.RFC3339),
+		VetName:                      v.VetName,
+		BatchNumber:                  v.BatchNumber,
+		Notes:                        v.Notes,
+		GoogleCalendarEventID:        v.GoogleCalendarEventID,
+		GoogleCalendarNextDueEventID: v.GoogleCalendarNextDueEventID,
 	}
 	if v.NextDueAt != nil {
 		s := v.NextDueAt.Format("2006-01-02")

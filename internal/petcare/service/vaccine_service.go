@@ -16,12 +16,13 @@ type RecordVaccineInput struct {
 	Name           string
 	AdministeredAt time.Time
 	// RecurrenceDays is set by the HTTP layer and consumed by VaccineUseCase to compute NextDueAt.
-	RecurrenceDays        *int
-	NextDueAt             *time.Time
-	VetName               *string
-	BatchNumber           *string
-	Notes                 *string
-	GoogleCalendarEventID string
+	RecurrenceDays               *int
+	NextDueAt                    *time.Time
+	VetName                      *string
+	BatchNumber                  *string
+	Notes                        *string
+	GoogleCalendarEventID        string
+	GoogleCalendarNextDueEventID string
 }
 
 type VaccineService struct {
@@ -49,15 +50,16 @@ func (s *VaccineService) RecordVaccine(ctx context.Context, in RecordVaccineInpu
 		return nil, fmt.Errorf("%w: administered_at is required", domain.ErrValidation)
 	}
 	v, err := s.repo.CreateVaccine(ctx, domain.Vaccine{
-		ID:                    uuid.New().String(),
-		PetID:                 in.PetID,
-		Name:                  in.Name,
-		AdministeredAt:        in.AdministeredAt,
-		NextDueAt:             in.NextDueAt,
-		VetName:               in.VetName,
-		BatchNumber:           in.BatchNumber,
-		Notes:                 in.Notes,
-		GoogleCalendarEventID: in.GoogleCalendarEventID,
+		ID:                           uuid.New().String(),
+		PetID:                        in.PetID,
+		Name:                         in.Name,
+		AdministeredAt:               in.AdministeredAt,
+		NextDueAt:                    in.NextDueAt,
+		VetName:                      in.VetName,
+		BatchNumber:                  in.BatchNumber,
+		Notes:                        in.Notes,
+		GoogleCalendarEventID:        in.GoogleCalendarEventID,
+		GoogleCalendarNextDueEventID: in.GoogleCalendarNextDueEventID,
 	})
 	if err != nil {
 		return nil, err

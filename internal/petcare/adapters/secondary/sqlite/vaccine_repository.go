@@ -15,7 +15,7 @@ type VaccineRepository struct{ db dbtx }
 func NewVaccineRepository(db dbtx) *VaccineRepository { return &VaccineRepository{db: db} }
 
 func (r *VaccineRepository) ListVaccines(ctx context.Context, petID string) ([]domain.Vaccine, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id, pet_id, name, administered_at, next_due_at, vet_name, batch_number, notes, google_calendar_event_id FROM vaccines WHERE pet_id = ? ORDER BY administered_at DESC`, petID)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, pet_id, name, administered_at, next_due_at, vet_name, batch_number, notes, google_calendar_event_id, google_calendar_next_due_event_id FROM vaccines WHERE pet_id = ? ORDER BY administered_at DESC`, petID)
 	if err != nil {
 		return nil, err
 	}
@@ -32,9 +32,9 @@ func (r *VaccineRepository) ListVaccines(ctx context.Context, petID string) ([]d
 }
 
 func (r *VaccineRepository) CreateVaccine(ctx context.Context, v domain.Vaccine) (*domain.Vaccine, error) {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO vaccines (id, pet_id, name, administered_at, next_due_at, vet_name, batch_number, notes, google_calendar_event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO vaccines (id, pet_id, name, administered_at, next_due_at, vet_name, batch_number, notes, google_calendar_event_id, google_calendar_next_due_event_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		v.ID, v.PetID, v.Name, v.AdministeredAt.Format(time.RFC3339),
-		formatDate(v.NextDueAt), v.VetName, v.BatchNumber, v.Notes, v.GoogleCalendarEventID)
+		formatDate(v.NextDueAt), v.VetName, v.BatchNumber, v.Notes, v.GoogleCalendarEventID, v.GoogleCalendarNextDueEventID)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (r *VaccineRepository) CreateVaccine(ctx context.Context, v domain.Vaccine)
 }
 
 func (r *VaccineRepository) GetVaccine(ctx context.Context, petID, vaccineID string) (*domain.Vaccine, error) {
-	row := r.db.QueryRowContext(ctx, `SELECT id, pet_id, name, administered_at, next_due_at, vet_name, batch_number, notes, google_calendar_event_id FROM vaccines WHERE id = ? AND pet_id = ?`, vaccineID, petID)
+	row := r.db.QueryRowContext(ctx, `SELECT id, pet_id, name, administered_at, next_due_at, vet_name, batch_number, notes, google_calendar_event_id, google_calendar_next_due_event_id FROM vaccines WHERE id = ? AND pet_id = ?`, vaccineID, petID)
 	v, err := scanVaccine(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrNotFound
@@ -65,7 +65,7 @@ func scanVaccine(s scanner) (*domain.Vaccine, error) {
 	var v domain.Vaccine
 	var adminAt string
 	var nextDue sql.NullString
-	err := s.Scan(&v.ID, &v.PetID, &v.Name, &adminAt, &nextDue, &v.VetName, &v.BatchNumber, &v.Notes, &v.GoogleCalendarEventID)
+	err := s.Scan(&v.ID, &v.PetID, &v.Name, &adminAt, &nextDue, &v.VetName, &v.BatchNumber, &v.Notes, &v.GoogleCalendarEventID, &v.GoogleCalendarNextDueEventID)
 	if err != nil {
 		return nil, err
 	}

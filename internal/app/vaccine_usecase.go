@@ -47,25 +47,36 @@ func (uc *VaccineUseCase) RecordVaccine(ctx context.Context, in service.RecordVa
 		in.NextDueAt = &nextDue
 	}
 
-	eventTime := in.AdministeredAt
-	reminderMin := 0
-	if in.NextDueAt != nil {
-		eventTime = *in.NextDueAt
-		reminderMin = 7 * 24 * 60
-	}
 	eventID, err := uc.calendar.CreateEvent(ctx, pet.GoogleCalendarID, gcalendar.Event{
 		Title:       in.Name,
 		Description: fmt.Sprintf("Pet: %s", pet.Name),
-		StartTime:   eventTime,
-		EndTime:     eventTime,
-		ReminderMin: reminderMin,
+		StartTime:   in.AdministeredAt,
+		EndTime:     in.AdministeredAt,
+		ReminderMin: 0,
 		TimeZone:    uc.timezone,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create vaccine calendar event: %w", err)
 	}
 
+	nextDueEventID := ""
+	if in.NextDueAt != nil {
+		nextDueEventID, err = uc.calendar.CreateEvent(ctx, pet.GoogleCalendarID, gcalendar.Event{
+			Title:       fmt.Sprintf("Next due: %s", in.Name),
+			Description: fmt.Sprintf("Pet: %s", pet.Name),
+			StartTime:   *in.NextDueAt,
+			EndTime:     *in.NextDueAt,
+			ReminderMin: 7 * 24 * 60,
+			TimeZone:    uc.timezone,
+		})
+		if err != nil {
+			uc.compensateVaccineEvents(ctx, pet.GoogleCalendarID, []string{eventID}, in.PetID)
+			return nil, fmt.Errorf("create vaccine next due calendar event: %w", err)
+		}
+	}
+
 	in.GoogleCalendarEventID = eventID
+	in.GoogleCalendarNextDueEventID = nextDueEventID
 	var vaccine *domain.Vaccine
 	err = uc.txRunner.WithinTx(ctx, func(_ *service.PetService, vaccines *service.VaccineService, _ *service.TreatmentService, _ *service.DoseService) error {
 		recorded, err := vaccines.RecordVaccine(ctx, in)
@@ -76,14 +87,7 @@ func (uc *VaccineUseCase) RecordVaccine(ctx context.Context, in service.RecordVa
 		return nil
 	})
 	if err != nil {
-		if delErr := uc.calendar.DeleteEvent(ctx, pet.GoogleCalendarID, eventID); delErr != nil {
-			uc.logger.Error("calendar compensation failed after vaccine create error",
-				zap.String("pet_id", in.PetID),
-				zap.String("calendar_id", pet.GoogleCalendarID),
-				zap.String("event_id", eventID),
-				zap.Error(delErr),
-			)
-		}
+		uc.compensateVaccineEvents(ctx, pet.GoogleCalendarID, []string{eventID, nextDueEventID}, in.PetID)
 		return nil, err
 	}
 	return vaccine, nil
@@ -107,9 +111,12 @@ func (uc *VaccineUseCase) DeleteVaccine(ctx context.Context, petID, vaccineID st
 			return fmt.Errorf("load vaccine %q: %w", vaccineID, err)
 		}
 		vaccine = loadedVaccine
-		if vaccine.GoogleCalendarEventID != "" {
-			if err := uc.calendar.DeleteEvent(ctx, pet.GoogleCalendarID, vaccine.GoogleCalendarEventID); err != nil {
-				return fmt.Errorf("delete vaccine calendar event %q: %w", vaccine.GoogleCalendarEventID, err)
+		for _, eventID := range []string{vaccine.GoogleCalendarEventID, vaccine.GoogleCalendarNextDueEventID} {
+			if eventID == "" {
+				continue
+			}
+			if err := uc.calendar.DeleteEvent(ctx, pet.GoogleCalendarID, eventID); err != nil {
+				return fmt.Errorf("delete vaccine calendar event %q: %w", eventID, err)
 			}
 			externalDeleted = true
 		}
@@ -127,4 +134,20 @@ func (uc *VaccineUseCase) DeleteVaccine(ctx context.Context, petID, vaccineID st
 		)
 	}
 	return err
+}
+
+func (uc *VaccineUseCase) compensateVaccineEvents(ctx context.Context, calendarID string, eventIDs []string, petID string) {
+	for _, eventID := range eventIDs {
+		if eventID == "" {
+			continue
+		}
+		if delErr := uc.calendar.DeleteEvent(ctx, calendarID, eventID); delErr != nil {
+			uc.logger.Error("calendar compensation failed after vaccine create error",
+				zap.String("pet_id", petID),
+				zap.String("calendar_id", calendarID),
+				zap.String("event_id", eventID),
+				zap.Error(delErr),
+			)
+		}
+	}
 }

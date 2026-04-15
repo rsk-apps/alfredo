@@ -73,8 +73,15 @@ func main() {
 		if err != nil {
 			zapLogger.Fatal("gcalendar init failed", zap.Error(err))
 		}
+		zapLogger.Info("gcalendar adapter enabled", zap.String("mode", "google"))
 	} else {
 		calendarAdapter = gcalendar.NewNoopAdapter(zapLogger)
+		zapLogger.Warn("gcalendar noop adapter enabled",
+			zap.String("mode", "noop"),
+			zap.Bool("client_id_set", cfg.GCalendar.ClientID != ""),
+			zap.Bool("client_secret_set", cfg.GCalendar.ClientSecret != ""),
+			zap.Bool("refresh_token_set", cfg.GCalendar.RefreshToken != ""),
+		)
 	}
 
 	e, err := httpserver.New(httpserver.Config{

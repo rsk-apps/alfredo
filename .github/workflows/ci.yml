@@ -70,6 +70,7 @@ jobs:
           docker-compose-path: docker-compose.prod.yml
           environment-variables: |
             IMAGE_TAG=latest
+            APP_GCALENDAR_CLIENT_ID=${{ secrets.APP_GCALENDAR_CLIENT_ID }}
+            APP_GCALENDAR_CLIENT_SECRET=${{ secrets.APP_GCALENDAR_CLIENT_SECRET }}
+            APP_GCALENDAR_REFRESH_TOKEN=${{ secrets.APP_GCALENDAR_REFRESH_TOKEN }}
             APP_AUTH_API_KEY=${{ secrets.APP_AUTH_API_KEY }}
-            APP_WEBHOOK_BASE_URL=${{ secrets.APP_WEBHOOK_BASE_URL }}
-            APP_WEBHOOK_API_KEY=${{ secrets.APP_WEBHOOK_API_KEY }}

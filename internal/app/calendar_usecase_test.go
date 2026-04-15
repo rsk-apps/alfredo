@@ -43,6 +43,7 @@ type calendarFake struct {
 	createRecurringID string
 	deletedCalendars  []string
 	deletedEvents     []string
+	createdEvents     []gcalendar.Event
 	createEventCalls  int
 }
 
@@ -53,7 +54,8 @@ func (c *calendarFake) DeleteCalendar(_ context.Context, calendarID string) erro
 	c.deletedCalendars = append(c.deletedCalendars, calendarID)
 	return nil
 }
-func (c *calendarFake) CreateEvent(_ context.Context, _ string, _ gcalendar.Event) (string, error) {
+func (c *calendarFake) CreateEvent(_ context.Context, _ string, event gcalendar.Event) (string, error) {
+	c.createdEvents = append(c.createdEvents, event)
 	id := c.createEventIDs[c.createEventCalls]
 	c.createEventCalls++
 	return id, nil
@@ -84,16 +86,22 @@ func (r *petRepoStub) Delete(context.Context, string) error                    {
 
 type vaccineRepoStub struct {
 	createErr error
+	last      *domain.Vaccine
 }
 
 func (r *vaccineRepoStub) ListVaccines(context.Context, string) ([]domain.Vaccine, error) {
 	return nil, nil
 }
-func (r *vaccineRepoStub) CreateVaccine(context.Context, domain.Vaccine) (*domain.Vaccine, error) {
-	return nil, r.createErr
+func (r *vaccineRepoStub) CreateVaccine(_ context.Context, v domain.Vaccine) (*domain.Vaccine, error) {
+	if r.createErr != nil {
+		return nil, r.createErr
+	}
+	copy := v
+	r.last = &copy
+	return &copy, nil
 }
 func (r *vaccineRepoStub) GetVaccine(context.Context, string, string) (*domain.Vaccine, error) {
-	return nil, nil
+	return r.last, nil
 }
 func (r *vaccineRepoStub) DeleteVaccine(context.Context, string, string) error { return nil }
 
@@ -162,6 +170,99 @@ func TestVaccineUseCaseCreateCompensatesEventOnTxError(t *testing.T) {
 	}
 	if len(calendar.deletedEvents) != 1 || calendar.deletedEvents[0] != "evt-1" {
 		t.Fatalf("unexpected event compensation: %#v", calendar.deletedEvents)
+	}
+}
+
+func TestVaccineUseCaseRecordsEventAtAdministeredTimeWhenRecurring(t *testing.T) {
+	pet := &domain.Pet{ID: "p1", Name: "Luna", GoogleCalendarID: "cal-1"}
+	calendar := &calendarFake{createEventIDs: []string{"evt-admin", "evt-next"}}
+	vaccineRepo := &vaccineRepoStub{}
+	uc := app.NewVaccineUseCase(
+		&stubVaccineService{},
+		&fakePetGetterWithCalendar{pet: pet},
+		serviceTxRunner{
+			petRepo:       &petRepoStub{pet: pet},
+			vaccineRepo:   vaccineRepo,
+			treatmentRepo: &treatmentRepoStub{},
+			doseRepo:      &doseRepoStub{},
+		},
+		calendar,
+		"America/Sao_Paulo",
+		zap.NewNop(),
+	)
+
+	administeredAt := time.Date(2026, 3, 27, 9, 0, 0, 0, time.FixedZone("BRT", -3*60*60))
+	recurrenceDays := 365
+	vaccine, err := uc.RecordVaccine(context.Background(), service.RecordVaccineInput{
+		PetID:          "p1",
+		Name:           "Rabies",
+		AdministeredAt: administeredAt,
+		RecurrenceDays: &recurrenceDays,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(calendar.createdEvents) != 2 {
+		t.Fatalf("expected 2 calendar events, got %d", len(calendar.createdEvents))
+	}
+	if !calendar.createdEvents[0].StartTime.Equal(administeredAt) {
+		t.Fatalf("expected event at administered time %s, got %s", administeredAt, calendar.createdEvents[0].StartTime)
+	}
+	if vaccine.NextDueAt == nil {
+		t.Fatal("expected next_due_at to be computed")
+	}
+	wantNextDue := administeredAt.AddDate(0, 0, recurrenceDays)
+	if !vaccine.NextDueAt.Equal(wantNextDue) {
+		t.Fatalf("expected next_due_at %s, got %s", wantNextDue, *vaccine.NextDueAt)
+	}
+	if !calendar.createdEvents[1].StartTime.Equal(wantNextDue) {
+		t.Fatalf("expected next due event at %s, got %s", wantNextDue, calendar.createdEvents[1].StartTime)
+	}
+	if calendar.createdEvents[1].ReminderMin != 7*24*60 {
+		t.Fatalf("expected next due reminder 10080 minutes, got %d", calendar.createdEvents[1].ReminderMin)
+	}
+	if vaccine.GoogleCalendarEventID != "evt-admin" {
+		t.Fatalf("expected administered event id evt-admin, got %q", vaccine.GoogleCalendarEventID)
+	}
+	if vaccine.GoogleCalendarNextDueEventID != "evt-next" {
+		t.Fatalf("expected next due event id evt-next, got %q", vaccine.GoogleCalendarNextDueEventID)
+	}
+}
+
+func TestVaccineUseCaseDeleteRemovesAdministeredAndNextDueEvents(t *testing.T) {
+	pet := &domain.Pet{ID: "p1", Name: "Luna", GoogleCalendarID: "cal-1"}
+	vaccineRepo := &vaccineRepoStub{last: &domain.Vaccine{
+		ID:                           "v1",
+		PetID:                        "p1",
+		Name:                         "Rabies",
+		AdministeredAt:               time.Now(),
+		GoogleCalendarEventID:        "evt-admin",
+		GoogleCalendarNextDueEventID: "evt-next",
+	}}
+	calendar := &calendarFake{}
+	uc := app.NewVaccineUseCase(
+		&stubVaccineService{},
+		&fakePetGetterWithCalendar{pet: pet},
+		serviceTxRunner{
+			petRepo:       &petRepoStub{pet: pet},
+			vaccineRepo:   vaccineRepo,
+			treatmentRepo: &treatmentRepoStub{},
+			doseRepo:      &doseRepoStub{},
+		},
+		calendar,
+		"America/Sao_Paulo",
+		zap.NewNop(),
+	)
+
+	err := uc.DeleteVaccine(context.Background(), "p1", "v1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(calendar.deletedEvents) != 2 {
+		t.Fatalf("expected 2 deleted events, got %#v", calendar.deletedEvents)
+	}
+	if calendar.deletedEvents[0] != "evt-admin" || calendar.deletedEvents[1] != "evt-next" {
+		t.Fatalf("unexpected deleted events: %#v", calendar.deletedEvents)
 	}
 }
 

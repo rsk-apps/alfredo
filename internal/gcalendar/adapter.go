@@ -165,9 +165,10 @@ func toGoogleEvent(event Event, intervalHours int) (*calendar.Event, error) {
 			TimeZone: event.TimeZone,
 		},
 		Reminders: &calendar.EventReminders{
-			UseDefault: false,
+			UseDefault:      false,
+			ForceSendFields: []string{"UseDefault"},
 			Overrides: []*calendar.EventReminder{
-				{Method: "popup", Minutes: int64(event.ReminderMin)},
+				{Method: "popup", Minutes: int64(event.ReminderMin), ForceSendFields: []string{"Minutes"}},
 			},
 		},
 	}
