@@ -22,6 +22,9 @@ type Port interface {
 	DeleteCalendar(ctx context.Context, calendarID string) error
 	CreateEvent(ctx context.Context, calendarID string, event Event) (eventID string, err error)
 	CreateRecurringEvent(ctx context.Context, calendarID string, event Event, intervalHours int) (eventID string, err error)
+	// StopRecurringEvent truncates the recurrence rule so the series ends at or before until
+	// (inclusive per RFC 5545). Pass the timestamp of the last desired occurrence, not the
+	// deletion moment, to avoid emitting a phantom final event.
 	StopRecurringEvent(ctx context.Context, calendarID string, eventID string, until time.Time) error
 	DeleteEvent(ctx context.Context, calendarID string, eventID string) error
 }

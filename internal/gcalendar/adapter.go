@@ -128,8 +128,10 @@ func (a *Adapter) StopRecurringEvent(ctx context.Context, calendarID string, eve
 	if !foundRule {
 		return fmt.Errorf("stop recurring event %q: recurrence rule not found", eventID)
 	}
-	ev.Recurrence = updated
-	if _, err := a.service.Events.Update(calendarID, eventID, ev).Context(ctx).Do(); err != nil {
+	_, err = a.service.Events.Patch(calendarID, eventID, &calendar.Event{
+		Recurrence: updated,
+	}).Context(ctx).Do()
+	if err != nil {
 		return fmt.Errorf("update recurring event %q: %w", eventID, err)
 	}
 	return nil
