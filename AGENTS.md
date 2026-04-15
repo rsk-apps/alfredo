@@ -12,7 +12,7 @@ internal/
   config/                   — unified Viper config
   logger/                   — Zap logger helpers for Echo context
   shared/health/            — shared HealthResult, DependencyStatus types
-  webhook/                  — HTTP emitter (no-op when base_url is empty)
+  gcalendar/                — Google Calendar adapter plus no-op local adapter
   petcare/                  — pet-care domain
     domain/                 — Pet, Vaccine types
     port/                   — repository interfaces only
@@ -20,16 +20,18 @@ internal/
     adapters/primary/http/  — HTTP handlers: pet, vaccine_handler
     adapters/secondary/sqlite/ — SQLite repositories + migrations (001)
   app/                      — Application Services (Use Cases) — cross-domain orchestration
-    vaccine_usecase.go      — vaccine → webhook events
-    pet_usecase.go          — pet CRUD pass-through
+    vaccine_usecase.go      — vaccine → calendar events
+    pet_usecase.go          — pet CRUD + per-pet calendar lifecycle
+    treatment_usecase.go    — treatment dose scheduling + calendar events
     health_aggregator.go    — unified /api/v1/health
     ports.go                — narrow interfaces for use cases
 ```
 
 ## Key Design Decisions
 
-- **No EventPublisher**: Pet-care services are pure CRUD. Cross-domain side-effects (webhook events to n8n) happen only in Use Cases in `internal/app/`.
-- **Fire-and-forget webhooks**: Webhook failures are logged and swallowed. Pet-care data always saves.
+- **No EventPublisher**: Pet-care services are pure CRUD. Cross-domain side-effects (Google Calendar writes) happen only in Use Cases in `internal/app/`.
+- **Transactional calendar writes**: Calendar failures return an error and roll back pet-care data writes, so reminder state is not lost silently.
+- **No-op calendar adapter for local dev**: When Google Calendar credentials are absent, Alfredo logs calendar calls and returns deterministic fake IDs.
 - **Handler interfaces unchanged**: HTTP handlers define narrow interfaces. Use Cases implement the same interfaces, so handlers don't change — only the injected dependency changes (service → use case for mutations).
 - **Domain isolation**: petcare domain must not import from app/; app/ imports and orchestrates services. This enforces unidirectional dependency.
 
@@ -72,7 +74,7 @@ bruno/
 ├── environments/Local.bru  — baseUrl + sample UUIDs for local dev
 ├── Healthcheck.bru
 ├── pets/                   — 5 requests (CRUD)
-├── care/vaccines/          — 3 requests
+├── vaccines/               — 3 requests
 └── treatments/             — 4 requests (CRUD)
 ```
 
@@ -102,7 +104,7 @@ make generate       # mockery
 ### Testing
 
 - **Domain service tests** (petcare/service): mock repository interfaces, test CRUD logic in isolation
-- **Use case tests** (app/*_test.go): mock domain services, test cross-domain orchestration and webhook emission
+- **Use case tests** (app/*_test.go): mock domain services, test cross-domain orchestration and calendar operations
 - **Handlers**: tested through use case layer; keep handler tests minimal (just wire-up verification)
 - **Run tests**: `make test` runs all tests in internal/
 
@@ -125,38 +127,37 @@ docker compose -f docker-compose.prod.yml up -d   # uses ghcr.io/rafaelsoares/al
 | `server.host` | `0.0.0.0` | `APP_SERVER_HOST` |
 | `server.port` | `8080` | `APP_SERVER_PORT` |
 | `database.path` | `./data/alfredo.db` | `APP_DATABASE_PATH` |
-| `webhook.base_url` | `` | `APP_WEBHOOK_BASE_URL` |
-| `webhook.api_key` | `` | `APP_WEBHOOK_API_KEY` |
+| `app.timezone` | `America/Sao_Paulo` | `APP_TIMEZONE` |
+| `gcalendar.client_id` | `` | `APP_GCALENDAR_CLIENT_ID` |
+| `gcalendar.client_secret` | `` | `APP_GCALENDAR_CLIENT_SECRET` |
+| `gcalendar.refresh_token` | `` | `APP_GCALENDAR_REFRESH_TOKEN` |
 | `auth.api_key` | `` | `APP_AUTH_API_KEY` |
 | `log.level` | `info` | `APP_LOG_LEVEL` |
 
-## Webhook (n8n integration)
+## Google Calendar Integration
 
-Alfredo emits fire-and-forget domain events to n8n on every mutation. Set `webhook.base_url`
-(`APP_WEBHOOK_BASE_URL`) to your n8n instance's webhook base URL (e.g. `http://localhost:5678/webhook`).
-Leave empty to disable — pet-care data always saves regardless.
+Alfredo writes pet-care reminder state directly to Google Calendar. Set `APP_GCALENDAR_CLIENT_ID`,
+`APP_GCALENDAR_CLIENT_SECRET`, and `APP_GCALENDAR_REFRESH_TOKEN` to enable the real adapter.
+When any credential is empty, Alfredo uses the no-op adapter for local development.
 
-All events are posted to `POST {base_url}/events`. The n8n workflow uses a Switch node on
-`{{ $json.event }}` to route to independent sub-workflows.
+Each pet gets its own Google Calendar. Vaccine reminders, finite treatment dose events, and ongoing
+treatment recurrence series are written to that pet's calendar. If a calendar write fails, the
+corresponding pet-care write is rolled back and the endpoint returns an error.
 
-### Event Envelope
+All user-facing pet-care time fields use `APP_TIMEZONE` for naive datetimes such as
+`2026-04-12T12:00:00`. RFC3339 values with an explicit offset keep that offset exactly.
+Date-only values are rejected for vaccine and treatment time fields; pet `birth_date` remains
+date-only.
 
-```json
-{
-  "event": "vaccine.taken",
-  "occurred_at": "2026-03-27T10:00:00Z",
-  "domain": "petcare",
-  "payload": { ...event-specific fields... }
-}
-```
+### Calendar Operations
 
-### Event Catalog
-
-| Event | Trigger | Key payload fields |
+| Operation | Trigger | Calendar behavior |
 |---|---|---|
-| `pet.created` | `POST /api/v1/pets` | `id`, `name`, `species`, `breed`, `birth_date` |
-| `pet.deleted` | `DELETE /api/v1/pets/:id` | `pet_id`, `pet_name` |
-| `vaccine.taken` | `POST /api/v1/pets/:id/vaccines` | `pet_id`, `pet_name`, `vaccine_id`, `vaccine_name`, `date`, `recurrence_days` (omitted if not set) |
-| `vaccine.deleted` | `DELETE /api/v1/pets/:id/vaccines/:vid` | `pet_id`, `pet_name`, `vaccine_id` |
-| `treatment.doses_scheduled` | `POST /api/v1/pets/:id/treatments` and daily extender job | `pet_id`, `pet_name`, `treatment_id`, `treatment_name`, `dosage_amount`, `dosage_unit`, `route`, `interval_hours`, `doses` (array of `{dose_id, scheduled_for}`) |
-| `treatment.stopped` | `DELETE /api/v1/pets/:id/treatments/:tid` | `pet_id`, `pet_name`, `treatment_id`, `treatment_name`, `stopped_at`, `deleted_dose_ids` |
+| Pet created | `POST /api/v1/pets` | Create pet calendar and store `google_calendar_id` |
+| Pet deleted | `DELETE /api/v1/pets/:id` | Delete pet calendar |
+| Vaccine recorded | `POST /api/v1/pets/:id/vaccines` | Create vaccine event and store `google_calendar_event_id` |
+| Vaccine deleted | `DELETE /api/v1/pets/:id/vaccines/:vid` | Delete vaccine event |
+| Finite treatment started | `POST /api/v1/pets/:id/treatments` with `ended_at` | Create one event per dose |
+| Finite treatment stopped | `DELETE /api/v1/pets/:id/treatments/:tid` | Delete future dose events |
+| Ongoing treatment started | `POST /api/v1/pets/:id/treatments` without `ended_at` | Create recurring event series |
+| Ongoing treatment stopped | `DELETE /api/v1/pets/:id/treatments/:tid` | Stop recurring event series |
