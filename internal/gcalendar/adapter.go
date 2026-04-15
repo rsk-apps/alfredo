@@ -156,6 +156,7 @@ func toGoogleEvent(event Event, intervalHours int) (*calendar.Event, error) {
 	gEvent := &calendar.Event{
 		Summary:     event.Title,
 		Description: event.Description,
+		Location:    event.Location,
 		Start: &calendar.EventDateTime{
 			DateTime: event.StartTime.Format(time.RFC3339),
 			TimeZone: event.TimeZone,
