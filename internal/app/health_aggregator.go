@@ -41,4 +41,3 @@ func (h *HealthAggregator) Check(ctx context.Context) health.HealthResult {
 	}
 	return health.HealthResult{Status: status, Dependencies: deps}
 }
-
