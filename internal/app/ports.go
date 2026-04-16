@@ -69,3 +69,12 @@ type TelegramPort = telegram.Port
 type PetCareTxRunner interface {
 	WithinTx(ctx context.Context, fn func(pets *service.PetService, vaccines *service.VaccineService, treatments *service.TreatmentService, doses *service.DoseService) error) error
 }
+
+// AppointmentServicer is the narrow interface consumed by AppointmentUseCase.
+type AppointmentServicer interface {
+	Create(ctx context.Context, in service.CreateAppointmentInput) (*domain.Appointment, error)
+	GetByID(ctx context.Context, petID, appointmentID string) (*domain.Appointment, error)
+	List(ctx context.Context, petID string) ([]domain.Appointment, error)
+	Update(ctx context.Context, petID, appointmentID string, in service.UpdateAppointmentInput) (*domain.Appointment, error)
+	Delete(ctx context.Context, petID, appointmentID string) error
+}
