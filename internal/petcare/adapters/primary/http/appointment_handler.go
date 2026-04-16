@@ -91,7 +91,7 @@ func (h *AppointmentHandler) create(c echo.Context) error {
 		zap.String("appointment_id", appt.ID),
 		zap.String("type", string(appt.Type)),
 	)
-	return c.JSON(http.StatusCreated, toAppointmentResponse(*appt))
+	return c.JSON(http.StatusCreated, toAppointmentResponse(*appt, h.loc))
 }
 
 func (h *AppointmentHandler) list(c echo.Context) error {
@@ -105,7 +105,7 @@ func (h *AppointmentHandler) list(c echo.Context) error {
 	}
 	resp := make([]appointmentResponse, 0, len(appts))
 	for _, a := range appts {
-		resp = append(resp, toAppointmentResponse(a))
+		resp = append(resp, toAppointmentResponse(a, h.loc))
 	}
 	logger.FromEcho(c).Info("appointments listed", zap.String("pet_id", petID), zap.Int("count", len(appts)))
 	return c.JSON(http.StatusOK, resp)
@@ -124,7 +124,7 @@ func (h *AppointmentHandler) getByID(c echo.Context) error {
 	if err != nil {
 		return mapError(c, err)
 	}
-	return c.JSON(http.StatusOK, toAppointmentResponse(*appt))
+	return c.JSON(http.StatusOK, toAppointmentResponse(*appt, h.loc))
 }
 
 func (h *AppointmentHandler) update(c echo.Context) error {
@@ -147,6 +147,12 @@ func (h *AppointmentHandler) update(c echo.Context) error {
 	}
 	if !validateRequest(c, &req) {
 		return nil
+	}
+	if req.ScheduledAt == nil && req.Provider == nil && req.Location == nil && req.Notes == nil {
+		return c.JSON(http.StatusBadRequest, newErrorResponse(
+			"validation_failed", "Request validation failed",
+			[]fieldError{{Field: "body", Issue: "at least one field must be provided"}},
+		))
 	}
 	in := service.UpdateAppointmentInput{
 		Provider: req.Provider,
@@ -171,7 +177,7 @@ func (h *AppointmentHandler) update(c echo.Context) error {
 		zap.String("pet_id", petID),
 		zap.String("appointment_id", appointmentID),
 	)
-	return c.JSON(http.StatusOK, toAppointmentResponse(*appt))
+	return c.JSON(http.StatusOK, toAppointmentResponse(*appt, h.loc))
 }
 
 func (h *AppointmentHandler) delete(c echo.Context) error {
@@ -207,12 +213,12 @@ type appointmentResponse struct {
 	CreatedAt             string  `json:"created_at"`
 }
 
-func toAppointmentResponse(a domain.Appointment) appointmentResponse {
+func toAppointmentResponse(a domain.Appointment, loc *time.Location) appointmentResponse {
 	return appointmentResponse{
 		ID:                    a.ID,
 		PetID:                 a.PetID,
 		Type:                  string(a.Type),
-		ScheduledAt:           a.ScheduledAt.Format(time.RFC3339),
+		ScheduledAt:           a.ScheduledAt.In(loc).Format(time.RFC3339),
 		Provider:              a.Provider,
 		Location:              a.Location,
 		Notes:                 a.Notes,
