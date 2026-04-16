@@ -51,6 +51,12 @@ func TestObservationService_Create_AssignsIDAndCreatedAt(t *testing.T) {
 	if observation.CreatedAt.IsZero() {
 		t.Fatal("expected CreatedAt to be set")
 	}
+	if got, want := observation.ObservedAt.Format(time.RFC3339), "2026-04-15T09:30:00-03:00"; got != want {
+		t.Fatalf("observed_at = %s, want %s", got, want)
+	}
+	if got, want := repo.stored.ObservedAt.Format(time.RFC3339), "2026-04-15T09:30:00-03:00"; got != want {
+		t.Fatalf("stored observed_at = %s, want %s", got, want)
+	}
 	if !observation.ObservedAt.Equal(observedAt) {
 		t.Fatalf("observed_at = %s, want %s", observation.ObservedAt, observedAt)
 	}

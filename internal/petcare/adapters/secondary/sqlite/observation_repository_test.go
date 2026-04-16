@@ -40,7 +40,7 @@ func TestObservationRepository_RoundTripOrdersByObservedAtAndCascades(t *testing
 	older := domain.Observation{
 		ID:          "obs-old",
 		PetID:       pet.ID,
-		ObservedAt:  time.Date(2026, 4, 14, 9, 0, 0, 0, time.UTC),
+		ObservedAt:  time.Date(2026, 4, 14, 9, 0, 0, 0, time.FixedZone("BRT", -3*60*60)),
 		Description: "Tired",
 		CreatedAt:   time.Date(2026, 4, 14, 9, 1, 0, 0, time.UTC),
 	}
@@ -75,6 +75,9 @@ func TestObservationRepository_RoundTripOrdersByObservedAtAndCascades(t *testing
 	}
 	if fetched.Description != older.Description {
 		t.Fatalf("description = %q, want %q", fetched.Description, older.Description)
+	}
+	if got, want := fetched.ObservedAt.Format(time.RFC3339), "2026-04-14T09:00:00-03:00"; got != want {
+		t.Fatalf("observed_at = %s, want %s", got, want)
 	}
 
 	_, err = repo.GetByID(ctx, pet.ID, "missing")

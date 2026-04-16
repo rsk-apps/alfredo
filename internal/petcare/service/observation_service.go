@@ -38,7 +38,7 @@ func (s *ObservationService) Create(ctx context.Context, in CreateObservationInp
 	observation := domain.Observation{
 		ID:          uuid.New().String(),
 		PetID:       in.PetID,
-		ObservedAt:  in.ObservedAt.UTC(),
+		ObservedAt:  in.ObservedAt,
 		Description: in.Description,
 		CreatedAt:   time.Now().UTC(),
 	}

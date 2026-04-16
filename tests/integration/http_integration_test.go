@@ -727,7 +727,7 @@ func TestObservationLifecyclePersistsAndSendsBestEffortTelegram(t *testing.T) {
 	requireNonEmpty(t, observation.ID, "observation id")
 	requireEqual(t, pet.ID, observation.PetID, "observation pet id")
 	requireEqual(t, "Vomited after breakfast", observation.Description, "observation description")
-	requireEqual(t, "2026-04-15T12:30:00Z", observation.ObservedAt, "observation observed_at")
+	requireEqual(t, "2026-04-15T09:30:00-03:00", observation.ObservedAt, "observation observed_at")
 	requireNonEmpty(t, observation.CreatedAt, "observation created_at")
 	requireEqual(t, 0, len(fx.calendar.createdEvents), "calendar events after observation create")
 	requireEqual(t, 1, fx.telegram.count(), "telegram messages after observation create")
@@ -740,7 +740,7 @@ func TestObservationLifecyclePersistsAndSendsBestEffortTelegram(t *testing.T) {
 
 	row := queryObservation(t, fx.db, observation.ID)
 	requireEqual(t, pet.ID, row.PetID, "db observation pet id")
-	requireEqual(t, "2026-04-15T12:30:00Z", row.ObservedAt, "db observation observed_at")
+	requireEqual(t, "2026-04-15T09:30:00-03:00", row.ObservedAt, "db observation observed_at")
 	requireEqual(t, "Vomited after breakfast", row.Description, "db observation description")
 	requireNonEmpty(t, row.CreatedAt, "db observation created_at")
 
