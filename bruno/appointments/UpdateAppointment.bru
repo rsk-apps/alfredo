@@ -1,0 +1,26 @@
+meta {
+  name: Update Appointment
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/pets/:id/appointments/:aid
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+params:path {
+  id: {{petId}}
+  aid: {{appointmentId}}
+}
+
+body:json {
+  {
+    "notes": "Rescheduled — brought forward one week"
+  }
+}

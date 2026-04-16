@@ -1,0 +1,29 @@
+meta {
+  name: Create Appointment
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/pets/:id/appointments
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+params:path {
+  id: {{petId}}
+}
+
+body:json {
+  {
+    "type": "vet",
+    "scheduled_at": "2026-06-15T10:00:00",
+    "provider": "Clínica VetCare",
+    "location": "Rua das Flores, 123",
+    "notes": "Annual checkup"
+  }
+}
