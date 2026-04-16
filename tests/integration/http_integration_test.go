@@ -720,6 +720,107 @@ func TestTreatmentFailuresAndValidationPreserveState(t *testing.T) {
 	requireStatus(t, rec, http.StatusBadRequest)
 }
 
+func TestObservationLifecyclePersistsAndSendsBestEffortTelegram(t *testing.T) {
+	fx := newFixture(t)
+	pet := fx.createPet(map[string]any{"name": "Luna", "species": "dog"})
+
+	rec := fx.doJSON(http.MethodPost, "/api/v1/pets/"+pet.ID+"/observations", map[string]any{
+		"observed_at": "2026-04-15T09:30:00",
+		"description": "Vomited after breakfast",
+	}, "bearer")
+	requireStatus(t, rec, http.StatusCreated)
+	var observation observationResponse
+	decodeJSON(t, rec, &observation)
+	requireNonEmpty(t, observation.ID, "observation id")
+	requireEqual(t, pet.ID, observation.PetID, "observation pet id")
+	requireEqual(t, "Vomited after breakfast", observation.Description, "observation description")
+	requireEqual(t, "2026-04-15T12:30:00Z", observation.ObservedAt, "observation observed_at")
+	requireNonEmpty(t, observation.CreatedAt, "observation created_at")
+	requireEqual(t, 0, len(fx.calendar.createdEvents), "calendar events after observation create")
+	requireEqual(t, 1, fx.telegram.count(), "telegram messages after observation create")
+	assertTelegramHTML(t, fx.telegram.message(0), []string{
+		"<b>Observação registrada</b>",
+		"<b>Pet:</b> Luna",
+		"<b>Observado em:</b> 15/04/2026 09:30",
+		"<b>Descrição:</b> Vomited after breakfast",
+	})
+
+	row := queryObservation(t, fx.db, observation.ID)
+	requireEqual(t, pet.ID, row.PetID, "db observation pet id")
+	requireEqual(t, "2026-04-15T12:30:00Z", row.ObservedAt, "db observation observed_at")
+	requireEqual(t, "Vomited after breakfast", row.Description, "db observation description")
+	requireNonEmpty(t, row.CreatedAt, "db observation created_at")
+
+	older := fx.createObservation(pet.ID, map[string]any{
+		"observed_at": "2026-04-14T09:30:00-03:00",
+		"description": "Seemed tired",
+	})
+	rec = fx.doJSON(http.MethodGet, "/api/v1/pets/"+pet.ID+"/observations", nil, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var listed []observationResponse
+	decodeJSON(t, rec, &listed)
+	requireEqual(t, 2, len(listed), "listed observation count")
+	requireEqual(t, observation.ID, listed[0].ID, "first listed observation id")
+	requireEqual(t, older.ID, listed[1].ID, "second listed observation id")
+
+	rec = fx.doJSON(http.MethodGet, "/api/v1/pets/"+pet.ID+"/observations/"+observation.ID, nil, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var fetched observationResponse
+	decodeJSON(t, rec, &fetched)
+	requireEqual(t, observation.ID, fetched.ID, "fetched observation id")
+}
+
+func TestObservationAuthValidationAndNotFound(t *testing.T) {
+	fx := newFixture(t)
+	pet := fx.createPet(map[string]any{"name": "Luna", "species": "dog"})
+
+	rec := fx.doJSON(http.MethodGet, "/api/v1/pets/"+pet.ID+"/observations", nil, "")
+	requireStatus(t, rec, http.StatusUnauthorized)
+
+	rec = fx.doJSON(http.MethodPost, "/api/v1/pets/not-a-uuid/observations", map[string]any{
+		"observed_at": "2026-04-15T09:30:00",
+		"description": "Vomited",
+	}, "bearer")
+	requireStatus(t, rec, http.StatusBadRequest)
+
+	rec = fx.doJSON(http.MethodPost, "/api/v1/pets/"+pet.ID+"/observations", map[string]any{
+		"observed_at": "2026-04-15",
+		"description": "Vomited",
+	}, "bearer")
+	requireStatus(t, rec, http.StatusBadRequest)
+	requireEqual(t, 0, countRows(t, fx.db, "pet_observations"), "observation rows after invalid date")
+
+	rec = fx.doJSON(http.MethodPost, "/api/v1/pets/"+pet.ID+"/observations", map[string]any{
+		"observed_at": "2026-04-15T09:30:00",
+		"description": "",
+	}, "bearer")
+	requireStatus(t, rec, http.StatusBadRequest)
+	requireEqual(t, 0, countRows(t, fx.db, "pet_observations"), "observation rows after empty description")
+
+	rec = fx.doJSON(http.MethodGet, "/api/v1/pets/"+pet.ID+"/observations/not-a-uuid", nil, "bearer")
+	requireStatus(t, rec, http.StatusBadRequest)
+
+	rec = fx.doJSON(http.MethodGet, "/api/v1/pets/"+pet.ID+"/observations/123e4567-e89b-12d3-a456-426614174999", nil, "bearer")
+	requireStatus(t, rec, http.StatusNotFound)
+}
+
+func TestObservationTelegramFailureDoesNotRollback(t *testing.T) {
+	fx := newFixture(t)
+	pet := fx.createPet(map[string]any{"name": "Luna", "species": "dog"})
+	fx.telegram.failSend = errors.New("telegram unavailable")
+
+	rec := fx.doJSON(http.MethodPost, "/api/v1/pets/"+pet.ID+"/observations", map[string]any{
+		"observed_at": "2026-04-15T09:30:00",
+		"description": "Vomited after breakfast",
+	}, "bearer")
+	requireStatus(t, rec, http.StatusCreated)
+	var observation observationResponse
+	decodeJSON(t, rec, &observation)
+	requireEqual(t, 1, countRows(t, fx.db, "pet_observations"), "observation rows after telegram failure")
+	requireEqual(t, 1, fx.telegram.count(), "telegram send attempts after observation create failure")
+	requireEqual(t, "Vomited after breakfast", queryObservation(t, fx.db, observation.ID).Description, "persisted observation description")
+}
+
 func TestTelegramFailuresDoNotRollbackPetcareState(t *testing.T) {
 	fx := newFixture(t)
 	pet := fx.createPet(map[string]any{"name": "Luna", "species": "dog"})
@@ -783,6 +884,14 @@ func (fx *fixture) createTreatment(petID string, body map[string]any) treatmentR
 	var treatment treatmentResponse
 	decodeJSON(fx.t, rec, &treatment)
 	return treatment
+}
+
+func (fx *fixture) createObservation(petID string, body map[string]any) observationResponse {
+	rec := fx.doJSON(http.MethodPost, "/api/v1/pets/"+petID+"/observations", body, "bearer")
+	requireStatus(fx.t, rec, http.StatusCreated)
+	var observation observationResponse
+	decodeJSON(fx.t, rec, &observation)
+	return observation
 }
 
 func (fx *fixture) doJSON(method, path string, body any, auth string) *httptest.ResponseRecorder {
@@ -861,6 +970,14 @@ type treatmentResponse struct {
 	Doses                 []doseResponse `json:"doses"`
 }
 
+type observationResponse struct {
+	ID          string `json:"id"`
+	PetID       string `json:"pet_id"`
+	ObservedAt  string `json:"observed_at"`
+	Description string `json:"description"`
+	CreatedAt   string `json:"created_at"`
+}
+
 type petRow struct {
 	ID               string
 	Name             string
@@ -904,6 +1021,14 @@ type treatmentRow struct {
 	CreatedAt             string
 }
 
+type observationRow struct {
+	ID          string
+	PetID       string
+	ObservedAt  string
+	Description string
+	CreatedAt   string
+}
+
 func queryPet(t *testing.T, db *sql.DB, id string) petRow {
 	t.Helper()
 	var row petRow
@@ -939,6 +1064,19 @@ func queryTreatment(t *testing.T, db *sql.DB, id string) treatmentRow {
 	).Scan(&row.ID, &row.PetID, &row.Name, &row.DosageAmount, &row.DosageUnit, &row.Route, &row.IntervalHours, &row.StartedAt, &row.EndedAt, &row.StoppedAt, &row.VetName, &row.Notes, &row.GoogleCalendarEventID, &row.CreatedAt)
 	if err != nil {
 		t.Fatalf("query treatment %q: %v", id, err)
+	}
+	return row
+}
+
+func queryObservation(t *testing.T, db *sql.DB, id string) observationRow {
+	t.Helper()
+	var row observationRow
+	err := db.QueryRow(`
+		SELECT id, pet_id, observed_at, description, created_at
+		FROM pet_observations WHERE id = ?`, id,
+	).Scan(&row.ID, &row.PetID, &row.ObservedAt, &row.Description, &row.CreatedAt)
+	if err != nil {
+		t.Fatalf("query observation %q: %v", id, err)
 	}
 	return row
 }

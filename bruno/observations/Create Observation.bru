@@ -1,0 +1,26 @@
+meta {
+  name: Create Observation
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/pets/:id/observations
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+params:path {
+  id: {{petId}}
+}
+
+body:json {
+  {
+    "observed_at": "2026-04-15T09:30:00-03:00",
+    "description": "Vomited after breakfast and seemed tired for one hour."
+  }
+}

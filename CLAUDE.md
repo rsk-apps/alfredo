@@ -63,6 +63,9 @@ Vex also serves as an on-demand advisor. Agents and the user can invoke `/tl` mi
 | `GET /api/v1/pets/:id/treatments` | TreatmentHandler |
 | `GET /api/v1/pets/:id/treatments/:tid` | TreatmentHandler |
 | `DELETE /api/v1/pets/:id/treatments/:tid` | TreatmentHandler |
+| `POST /api/v1/pets/:id/observations` | ObservationHandler |
+| `GET /api/v1/pets/:id/observations` | ObservationHandler |
+| `GET /api/v1/pets/:id/observations/:oid` | ObservationHandler |
 | `POST /api/v1/pets/:id/appointments` | AppointmentHandler |
 | `GET /api/v1/pets/:id/appointments` | AppointmentHandler |
 | `GET /api/v1/pets/:id/appointments/:aid` | AppointmentHandler |
@@ -71,7 +74,7 @@ Vex also serves as an on-demand advisor. Agents and the user can invoke `/tl` mi
 
 ## API Collection
 
-The `bruno/` directory at repo root contains a [Bruno](https://www.usebruno.com/) importable collection covering all 18 routes. It is the **source of truth for route documentation** — keep it in sync whenever routes are added or removed.
+The `bruno/` directory at repo root contains a [Bruno](https://www.usebruno.com/) importable collection covering all 21 routes. It is the **source of truth for route documentation** — keep it in sync whenever routes are added or removed.
 
 ```
 bruno/
@@ -81,6 +84,7 @@ bruno/
 ├── pets/                   — 5 requests (CRUD)
 ├── vaccines/               — 3 requests
 ├── treatments/             — 4 requests (CRUD)
+├── observations/           — 3 requests (create + read)
 └── appointments/           — 5 requests (CRUD)
 ```
 

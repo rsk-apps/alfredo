@@ -42,6 +42,12 @@ type VaccineServicer interface {
 	DeleteVaccine(ctx context.Context, petID, vaccineID string) error
 }
 
+type ObservationServicer interface {
+	Create(ctx context.Context, in service.CreateObservationInput) (*domain.Observation, error)
+	ListByPet(ctx context.Context, petID string) ([]domain.Observation, error)
+	GetByID(ctx context.Context, petID, observationID string) (*domain.Observation, error)
+}
+
 // HealthResult mirrors shared/health.HealthResult (re-exported for convenience).
 type HealthResult = health.HealthResult
 

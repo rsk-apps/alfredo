@@ -53,6 +53,7 @@ func New(cfg Config) (*echo.Echo, error) {
 	vaccineRepo := petcaresqlite.NewVaccineRepository(cfg.DB)
 	treatmentRepo := petcaresqlite.NewTreatmentRepository(cfg.DB)
 	doseRepo := petcaresqlite.NewDoseRepository(cfg.DB)
+	observationRepo := petcaresqlite.NewObservationRepository(cfg.DB)
 	txRunner := petcaresqlite.NewTxRunner(cfg.DB)
 
 	appointmentRepo := petcaresqlite.NewAppointmentRepository(cfg.DB)
@@ -62,11 +63,13 @@ func New(cfg Config) (*echo.Echo, error) {
 	treatmentService := petsvc.NewTreatmentService(treatmentRepo)
 	doseService := petsvc.NewDoseService(doseRepo)
 	appointmentService := petsvc.NewAppointmentService(appointmentRepo)
+	observationService := petsvc.NewObservationService(observationRepo)
 
 	petUC := app.NewPetUseCase(petService, txRunner, cfg.Calendar, logger)
 	vaccineUC := app.NewVaccineUseCase(vaccineService, petService, txRunner, cfg.Calendar, cfg.Telegram, cfg.Location.String(), logger)
 	treatmentUC := app.NewTreatmentUseCase(treatmentService, doseService, petService, txRunner, cfg.Calendar, cfg.Telegram, cfg.Location.String(), logger)
 	appointmentUC := app.NewAppointmentUseCase(appointmentService, petService, cfg.Calendar, cfg.Telegram, cfg.Location.String(), logger)
+	observationUC := app.NewObservationUseCase(observationService, petService, cfg.Telegram, cfg.Location.String(), logger)
 
 	healthAgg := app.NewHealthAggregator(map[string]app.HealthPinger{
 		"sqlite": database.NewChecker(cfg.DB),
@@ -77,6 +80,7 @@ func New(cfg Config) (*echo.Echo, error) {
 	vaccineHandler := pethttp.NewVaccineHandler(vaccineUC, cfg.Location)
 	treatmentHandler := pethttp.NewTreatmentHandler(treatmentUC, cfg.Location)
 	appointmentHandler := pethttp.NewAppointmentHandler(appointmentUC, cfg.Location)
+	observationHandler := pethttp.NewObservationHandler(observationUC, cfg.Location)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -106,6 +110,7 @@ func New(cfg Config) (*echo.Echo, error) {
 	vaccineHandler.Register(protected)
 	treatmentHandler.Register(protected)
 	appointmentHandler.Register(protected)
+	observationHandler.Register(protected)
 
 	return e, nil
 }

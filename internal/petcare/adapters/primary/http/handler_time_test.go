@@ -36,6 +36,28 @@ func (t *treatmentSvcStub) List(context.Context, string) ([]domain.Treatment, ma
 }
 func (t *treatmentSvcStub) Stop(context.Context, string, string) error { return nil }
 
+type observationSvcStub struct {
+	created *domain.Observation
+}
+
+func (o *observationSvcStub) Create(_ context.Context, in service.CreateObservationInput) (*domain.Observation, error) {
+	observation := &domain.Observation{
+		ID:          "123e4567-e89b-12d3-a456-426614174001",
+		PetID:       in.PetID,
+		ObservedAt:  in.ObservedAt,
+		Description: in.Description,
+		CreatedAt:   time.Now().UTC(),
+	}
+	o.created = observation
+	return observation, nil
+}
+func (o *observationSvcStub) ListByPet(context.Context, string) ([]domain.Observation, error) {
+	return nil, nil
+}
+func (o *observationSvcStub) GetByID(context.Context, string, string) (*domain.Observation, error) {
+	return nil, nil
+}
+
 type petSvcStub struct{}
 
 func (p *petSvcStub) List(context.Context) ([]domain.Pet, error) { return nil, nil }
@@ -101,5 +123,49 @@ func TestPetHandlerAcceptsDateOnlyBirthDate(t *testing.T) {
 	}
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", rec.Code)
+	}
+}
+
+func TestObservationHandlerRejectsDateOnly(t *testing.T) {
+	e := echo.New()
+	loc, _ := time.LoadLocation("America/Sao_Paulo")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/pets/123e4567-e89b-12d3-a456-426614174000/observations", bytes.NewBufferString(`{"observed_at":"2026-04-12","description":"Vomited"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/pets/:id/observations")
+	c.SetParamNames("id")
+	c.SetParamValues("123e4567-e89b-12d3-a456-426614174000")
+
+	h := NewObservationHandler(&observationSvcStub{}, loc)
+	if err := h.CreateObservation(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestObservationHandlerParsesNaiveTimeWithConfiguredLocation(t *testing.T) {
+	e := echo.New()
+	loc, _ := time.LoadLocation("America/Sao_Paulo")
+	svc := &observationSvcStub{}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/pets/123e4567-e89b-12d3-a456-426614174000/observations", bytes.NewBufferString(`{"observed_at":"2026-04-12T09:30:00","description":"Vomited"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v1/pets/:id/observations")
+	c.SetParamNames("id")
+	c.SetParamValues("123e4567-e89b-12d3-a456-426614174000")
+
+	h := NewObservationHandler(svc, loc)
+	if err := h.CreateObservation(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rec.Code)
+	}
+	if got := svc.created.ObservedAt.Format(time.RFC3339); got != "2026-04-12T09:30:00-03:00" {
+		t.Fatalf("observed_at = %s, want 2026-04-12T09:30:00-03:00", got)
 	}
 }
