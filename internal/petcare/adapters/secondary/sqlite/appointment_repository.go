@@ -63,9 +63,9 @@ func (r *AppointmentRepository) List(ctx context.Context, petID string) ([]domai
 
 func (r *AppointmentRepository) Update(ctx context.Context, a domain.Appointment) (*domain.Appointment, error) {
 	res, err := r.db.ExecContext(ctx, `
-		UPDATE appointments SET type=?, scheduled_at=?, provider=?, location=?, notes=?
+		UPDATE appointments SET scheduled_at=?, provider=?, location=?, notes=?
 		WHERE id=? AND pet_id=?`,
-		string(a.Type), a.ScheduledAt.Format(time.RFC3339),
+		a.ScheduledAt.Format(time.RFC3339),
 		a.Provider, a.Location, a.Notes,
 		a.ID, a.PetID,
 	)

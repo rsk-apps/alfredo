@@ -45,6 +45,9 @@ func (s *AppointmentService) Create(ctx context.Context, in CreateAppointmentInp
 	if in.Type == "" {
 		return nil, fmt.Errorf("%w: type is required", domain.ErrValidation)
 	}
+	if in.ScheduledAt.IsZero() {
+		return nil, fmt.Errorf("%w: scheduled_at is required", domain.ErrValidation)
+	}
 	a, err := s.repo.Create(ctx, domain.Appointment{
 		ID:                    uuid.New().String(),
 		PetID:                 in.PetID,
@@ -73,14 +76,18 @@ func (s *AppointmentService) GetByID(ctx context.Context, petID, appointmentID s
 
 // List returns all appointments for a pet ordered by scheduled_at.
 func (s *AppointmentService) List(ctx context.Context, petID string) ([]domain.Appointment, error) {
-	return s.repo.List(ctx, petID)
+	as, err := s.repo.List(ctx, petID)
+	if err != nil {
+		return nil, fmt.Errorf("list appointments: %w", err)
+	}
+	return as, nil
 }
 
 // Update applies non-nil fields from in to the existing appointment identified by petID and appointmentID.
 func (s *AppointmentService) Update(ctx context.Context, petID, appointmentID string, in UpdateAppointmentInput) (*domain.Appointment, error) {
 	existing, err := s.GetByID(ctx, petID, appointmentID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("update appointment: %w", err)
 	}
 	if in.ScheduledAt != nil {
 		existing.ScheduledAt = *in.ScheduledAt
@@ -103,5 +110,8 @@ func (s *AppointmentService) Update(ctx context.Context, petID, appointmentID st
 
 // Delete removes an appointment by petID and appointmentID.
 func (s *AppointmentService) Delete(ctx context.Context, petID, appointmentID string) error {
-	return s.repo.Delete(ctx, petID, appointmentID)
+	if err := s.repo.Delete(ctx, petID, appointmentID); err != nil {
+		return fmt.Errorf("delete appointment: %w", err)
+	}
+	return nil
 }

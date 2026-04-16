@@ -93,6 +93,16 @@ func TestAppointmentService_Create_ValidationError(t *testing.T) {
 	}
 }
 
+func TestAppointmentService_Create_ValidationError_ZeroScheduledAt(t *testing.T) {
+	svc := service.NewAppointmentService(&mockAppointmentRepo{})
+	_, err := svc.Create(context.Background(), service.CreateAppointmentInput{
+		PetID: "p1", Type: domain.AppointmentTypeVet, ScheduledAt: time.Time{},
+	})
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("expected ErrValidation, got %v", err)
+	}
+}
+
 func TestAppointmentService_GetByID_NotFound(t *testing.T) {
 	svc := service.NewAppointmentService(&mockAppointmentRepo{})
 	_, err := svc.GetByID(context.Background(), "p1", "a1")
