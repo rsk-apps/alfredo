@@ -11,6 +11,11 @@ import (
 	echomw "github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
 
+	agenthttp "github.com/rafaelsoares/alfredo/internal/agent/adapters/primary/http"
+	agentnoop "github.com/rafaelsoares/alfredo/internal/agent/adapters/secondary/noop"
+	agentsqlite "github.com/rafaelsoares/alfredo/internal/agent/adapters/secondary/sqlite"
+	agentport "github.com/rafaelsoares/alfredo/internal/agent/port"
+	agentservice "github.com/rafaelsoares/alfredo/internal/agent/service"
 	"github.com/rafaelsoares/alfredo/internal/app"
 	"github.com/rafaelsoares/alfredo/internal/database"
 	pethttp "github.com/rafaelsoares/alfredo/internal/petcare/adapters/primary/http"
@@ -20,12 +25,14 @@ import (
 )
 
 type Config struct {
-	DB       *sql.DB
-	Calendar app.CalendarPort
-	Telegram app.TelegramPort
-	APIKey   string
-	Location *time.Location
-	Logger   *zap.Logger
+	DB                *sql.DB
+	Calendar          app.CalendarPort
+	Telegram          app.TelegramPort
+	AgentLLM          agentport.LLMClient
+	AgentRouterConfig agentservice.RouterConfig
+	APIKey            string
+	Location          *time.Location
+	Logger            *zap.Logger
 }
 
 func New(cfg Config) (*echo.Echo, error) {
@@ -47,6 +54,10 @@ func New(cfg Config) (*echo.Echo, error) {
 	logger := cfg.Logger
 	if logger == nil {
 		logger = zap.NewNop()
+	}
+	agentLLM := cfg.AgentLLM
+	if agentLLM == nil {
+		agentLLM = agentnoop.NewAdapter(logger)
 	}
 
 	petRepo := petcaresqlite.NewPetRepository(cfg.DB)
@@ -73,6 +84,9 @@ func New(cfg Config) (*echo.Echo, error) {
 	appointmentUC := app.NewAppointmentUseCase(appointmentService, petService, cfg.Calendar, cfg.Telegram, cfg.Location.String(), logger)
 	observationUC := app.NewObservationUseCase(observationService, petService, cfg.Telegram, cfg.Location.String(), logger)
 	supplyUC := app.NewSupplyUseCase(supplyService, petService)
+	agentInvocationRepo := agentsqlite.NewInvocationRepository(cfg.DB)
+	agentRouter := agentservice.NewRouter(agentLLM, agentInvocationRepo, cfg.AgentRouterConfig, logger)
+	agentUC := app.NewAgentUseCase(agentRouter, petUC, vaccineUC, treatmentUC, observationUC, appointmentUC, supplyUC, cfg.Location, logger)
 
 	healthAgg := app.NewHealthAggregator(map[string]app.HealthPinger{
 		"sqlite": database.NewChecker(cfg.DB),
@@ -85,6 +99,7 @@ func New(cfg Config) (*echo.Echo, error) {
 	appointmentHandler := pethttp.NewAppointmentHandler(appointmentUC, cfg.Location)
 	observationHandler := pethttp.NewObservationHandler(observationUC, cfg.Location)
 	supplyHandler := pethttp.NewSupplyHandler(supplyUC)
+	siriHandler := agenthttp.NewSiriHandler(agentUC)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -116,6 +131,7 @@ func New(cfg Config) (*echo.Echo, error) {
 	appointmentHandler.Register(protected)
 	observationHandler.Register(protected)
 	supplyHandler.Register(protected)
+	siriHandler.Register(protected)
 
 	return e, nil
 }

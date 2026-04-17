@@ -26,6 +26,15 @@ type TelegramConfig struct {
 	ChatID   string `mapstructure:"chat_id"`
 }
 
+type AgentConfig struct {
+	AnthropicAPIKey     string `mapstructure:"anthropic_api_key"`
+	Model               string `mapstructure:"model"`
+	MaxIterations       int    `mapstructure:"max_iterations"`
+	MaxOutputTokens     int    `mapstructure:"max_output_tokens"`
+	TotalTimeoutSeconds int    `mapstructure:"total_timeout_seconds"`
+	CallTimeoutSeconds  int    `mapstructure:"call_timeout_seconds"`
+}
+
 type AppConfig struct {
 	Timezone string `mapstructure:"timezone"`
 }
@@ -43,6 +52,7 @@ type Config struct {
 	Database  DatabaseConfig  `mapstructure:"database"`
 	GCalendar GCalendarConfig `mapstructure:"gcalendar"`
 	Telegram  TelegramConfig  `mapstructure:"telegram"`
+	Agent     AgentConfig     `mapstructure:"agent"`
 	App       AppConfig       `mapstructure:"app"`
 	Auth      AuthConfig      `mapstructure:"auth"`
 	Log       LogConfig       `mapstructure:"log"`
@@ -60,6 +70,12 @@ func Load() (*Config, error) {
 	v.SetDefault("gcalendar.refresh_token", "")
 	v.SetDefault("telegram.bot_token", "")
 	v.SetDefault("telegram.chat_id", "")
+	v.SetDefault("agent.anthropic_api_key", "")
+	v.SetDefault("agent.model", "claude-haiku-4-5-20251001")
+	v.SetDefault("agent.max_iterations", 5)
+	v.SetDefault("agent.max_output_tokens", 512)
+	v.SetDefault("agent.total_timeout_seconds", 20)
+	v.SetDefault("agent.call_timeout_seconds", 8)
 	v.SetDefault("app.timezone", "America/Sao_Paulo")
 	v.SetDefault("auth.api_key", "")
 	v.SetDefault("log.level", "info")

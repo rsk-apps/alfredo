@@ -13,6 +13,10 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	agentclaude "github.com/rafaelsoares/alfredo/internal/agent/adapters/secondary/claude"
+	agentnoop "github.com/rafaelsoares/alfredo/internal/agent/adapters/secondary/noop"
+	agentport "github.com/rafaelsoares/alfredo/internal/agent/port"
+	agentservice "github.com/rafaelsoares/alfredo/internal/agent/service"
 	"github.com/rafaelsoares/alfredo/internal/app"
 	"github.com/rafaelsoares/alfredo/internal/config"
 	"github.com/rafaelsoares/alfredo/internal/database"
@@ -105,10 +109,33 @@ func main() {
 		)
 	}
 
+	var agentLLM agentport.LLMClient
+	if cfg.Agent.AnthropicAPIKey != "" {
+		agentLLM, err = agentclaude.NewAdapter(agentclaude.Config{
+			APIKey:      cfg.Agent.AnthropicAPIKey,
+			Model:       cfg.Agent.Model,
+			CallTimeout: time.Duration(cfg.Agent.CallTimeoutSeconds) * time.Second,
+		})
+		if err != nil {
+			zapLogger.Fatal("agent claude init failed", zap.Error(err))
+		}
+		zapLogger.Info("agent llm adapter enabled", zap.String("mode", "claude"), zap.String("model", cfg.Agent.Model))
+	} else {
+		agentLLM = agentnoop.NewAdapter(zapLogger)
+		zapLogger.Warn("agent noop llm adapter enabled", zap.String("mode", "noop"))
+	}
+
 	e, err := httpserver.New(httpserver.Config{
 		DB:       db,
 		Calendar: calendarAdapter,
 		Telegram: telegramAdapter,
+		AgentLLM: agentLLM,
+		AgentRouterConfig: agentservice.RouterConfig{
+			MaxIterations:          cfg.Agent.MaxIterations,
+			MaxOutputTokensPerCall: cfg.Agent.MaxOutputTokens,
+			TotalTimeout:           time.Duration(cfg.Agent.TotalTimeoutSeconds) * time.Second,
+			CallTimeout:            time.Duration(cfg.Agent.CallTimeoutSeconds) * time.Second,
+		},
 		APIKey:   cfg.Auth.APIKey,
 		Location: loc,
 		Logger:   zapLogger,

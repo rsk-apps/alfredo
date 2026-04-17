@@ -40,6 +40,9 @@ var migration009 string
 //go:embed migrations/petcare/010_supplies.sql
 var migration010 string
 
+//go:embed migrations/petcare/011_agent_invocations.sql
+var migration011 string
+
 func Open(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -82,6 +85,7 @@ func migrate(db *sql.DB) error {
 		{"008_pet_observations", migration008},
 		{"009_appointments", migration009},
 		{"010_supplies", migration010},
+		{"011_agent_invocations", migration011},
 	}
 
 	for _, m := range migrations {

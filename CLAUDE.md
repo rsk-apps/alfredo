@@ -71,10 +71,16 @@ Vex also serves as an on-demand advisor. Agents and the user can invoke `/tl` mi
 | `GET /api/v1/pets/:id/appointments/:aid` | AppointmentHandler |
 | `PATCH /api/v1/pets/:id/appointments/:aid` | AppointmentHandler |
 | `DELETE /api/v1/pets/:id/appointments/:aid` | AppointmentHandler |
+| `POST /api/v1/pets/:id/supplies` | SupplyHandler |
+| `GET /api/v1/pets/:id/supplies` | SupplyHandler |
+| `GET /api/v1/pets/:id/supplies/:sid` | SupplyHandler |
+| `PATCH /api/v1/pets/:id/supplies/:sid` | SupplyHandler |
+| `DELETE /api/v1/pets/:id/supplies/:sid` | SupplyHandler |
+| `POST /api/v1/agent/siri` | SiriHandler |
 
 ## API Collection
 
-The `bruno/` directory at repo root contains a [Bruno](https://www.usebruno.com/) importable collection covering all 21 routes. It is the **source of truth for route documentation** — keep it in sync whenever routes are added or removed.
+The `bruno/` directory at repo root contains a [Bruno](https://www.usebruno.com/) importable collection covering all routes. It is the **source of truth for route documentation** — keep it in sync whenever routes are added or removed.
 
 ```
 bruno/
@@ -85,7 +91,9 @@ bruno/
 ├── vaccines/               — 3 requests
 ├── treatments/             — 4 requests (CRUD)
 ├── observations/           — 3 requests (create + read)
-└── appointments/           — 5 requests (CRUD)
+├── appointments/           — 5 requests (CRUD)
+├── supplies/               — 5 requests (CRUD)
+└── agent/                  — Siri command entrypoint
 ```
 
 **Import**: Open Bruno → Import Collection → select `bruno/` folder → set environment to **Local**.
@@ -143,6 +151,12 @@ docker compose -f docker-compose.prod.yml up -d   # uses ghcr.io/rafaelsoares/al
 | `gcalendar.refresh_token` | `` | `APP_GCALENDAR_REFRESH_TOKEN` |
 | `telegram.bot_token` | `` | `APP_TELEGRAM_BOT_TOKEN` |
 | `telegram.chat_id` | `` | `APP_TELEGRAM_CHAT_ID` |
+| `agent.anthropic_api_key` | `` | `APP_AGENT_ANTHROPIC_API_KEY` |
+| `agent.model` | `claude-haiku-4-5-20251001` | `APP_AGENT_MODEL` |
+| `agent.max_iterations` | `5` | `APP_AGENT_MAX_ITERATIONS` |
+| `agent.max_output_tokens` | `512` | `APP_AGENT_MAX_OUTPUT_TOKENS` |
+| `agent.total_timeout_seconds` | `20` | `APP_AGENT_TOTAL_TIMEOUT_SECONDS` |
+| `agent.call_timeout_seconds` | `8` | `APP_AGENT_CALL_TIMEOUT_SECONDS` |
 | `auth.api_key` | `` | `APP_AUTH_API_KEY` |
 | `log.level` | `info` | `APP_LOG_LEVEL` |
 
@@ -173,6 +187,14 @@ date-only.
 | Finite treatment stopped | `DELETE /api/v1/pets/:id/treatments/:tid` | Delete future dose events |
 | Ongoing treatment started | `POST /api/v1/pets/:id/treatments` without `ended_at` | Create recurring event series |
 | Ongoing treatment stopped | `DELETE /api/v1/pets/:id/treatments/:tid` | Stop recurring event series |
+
+## Agent Command Interface
+
+Alfredo exposes `POST /api/v1/agent/siri` for one-shot Portuguese natural-language commands from Siri Shortcuts. The endpoint accepts `{"text":"..."}` and returns `{"reply":"..."}`. It is guarded by the same API key middleware as the rest of `/api/v1`.
+
+The agent router owns the Claude tool-use loop and dispatches tool calls to existing pet-care use cases. The tool surface mirrors the non-delete pet-care endpoints: pet reads, vaccine read/create, treatment read/create, appointment read/create/reschedule, observation read/create, and supply read/create/update. Every invocation is best-effort audited in SQLite through `agent_invocations`.
+
+Set `APP_AGENT_ANTHROPIC_API_KEY` to enable the Claude adapter. When it is empty, Alfredo uses the no-op LLM adapter and returns a fixed Portuguese stub reply so local development works without Anthropic credentials.
 
 ## Telegram Integration
 

@@ -18,6 +18,9 @@ import (
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 
+	agentdomain "github.com/rafaelsoares/alfredo/internal/agent/domain"
+	agentport "github.com/rafaelsoares/alfredo/internal/agent/port"
+	agentservice "github.com/rafaelsoares/alfredo/internal/agent/service"
 	"github.com/rafaelsoares/alfredo/internal/database"
 	"github.com/rafaelsoares/alfredo/internal/gcalendar"
 	"github.com/rafaelsoares/alfredo/internal/httpserver"
@@ -35,6 +38,10 @@ type fixture struct {
 }
 
 func newFixture(t *testing.T) *fixture {
+	return newFixtureWithAgent(t, nil, agentservice.RouterConfig{})
+}
+
+func newFixtureWithAgent(t *testing.T, llm agentport.LLMClient, routerCfg agentservice.RouterConfig) *fixture {
 	t.Helper()
 
 	db, err := database.Open(filepath.Join(t.TempDir(), "alfredo.db"))
@@ -54,17 +61,47 @@ func newFixture(t *testing.T) *fixture {
 	calendar := &recordingCalendar{}
 	telegramRecorder := &recordingTelegram{}
 	e, err := httpserver.New(httpserver.Config{
-		DB:       db,
-		Calendar: calendar,
-		Telegram: telegramRecorder,
-		APIKey:   testAPIKey,
-		Location: loc,
-		Logger:   zap.NewNop(),
+		DB:                db,
+		Calendar:          calendar,
+		Telegram:          telegramRecorder,
+		AgentLLM:          llm,
+		AgentRouterConfig: routerCfg,
+		APIKey:            testAPIKey,
+		Location:          loc,
+		Logger:            zap.NewNop(),
 	})
 	if err != nil {
 		t.Fatalf("build server: %v", err)
 	}
 	return &fixture{t: t, db: db, echo: e, calendar: calendar, telegram: telegramRecorder}
+}
+
+type scriptedAgentLLM struct {
+	mu      sync.Mutex
+	outputs []agentport.LLMOutput
+	err     error
+	sleep   time.Duration
+}
+
+func (l *scriptedAgentLLM) Complete(ctx context.Context, _ agentport.LLMInput) (agentport.LLMOutput, error) {
+	if l.sleep > 0 {
+		select {
+		case <-time.After(l.sleep):
+		case <-ctx.Done():
+			return agentport.LLMOutput{}, ctx.Err()
+		}
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.err != nil {
+		return agentport.LLMOutput{}, l.err
+	}
+	if len(l.outputs) == 0 {
+		return agentport.LLMOutput{}, nil
+	}
+	out := l.outputs[0]
+	l.outputs = l.outputs[1:]
+	return out, nil
 }
 
 type createdCalendar struct {
@@ -244,6 +281,91 @@ func TestHealthAuthAndInvalidPathValidation(t *testing.T) {
 	rec = fx.doJSON(http.MethodGet, "/api/v1/pets/not-a-uuid/vaccines", nil, "bearer")
 	requireStatus(t, rec, http.StatusBadRequest)
 	requireEqual(t, 0, len(fx.calendar.createdEvents), "calendar event calls for invalid path")
+}
+
+func TestAgentSiriEndpointAuthValidationAndNoop(t *testing.T) {
+	fx := newFixture(t)
+
+	rec := fx.doJSON(http.MethodPost, "/api/v1/agent/siri", map[string]any{"text": "teste"}, "")
+	requireStatus(t, rec, http.StatusUnauthorized)
+
+	rec = fx.doJSON(http.MethodPost, "/api/v1/agent/siri", map[string]any{"text": ""}, "bearer")
+	requireStatus(t, rec, http.StatusBadRequest)
+	requireEqual(t, `{"error":"text is required"}`+"\n", rec.Body.String(), "empty text response")
+
+	rec = fx.doJSON(http.MethodPost, "/api/v1/agent/siri", map[string]any{"text": strings.Repeat("a", 2001)}, "bearer")
+	requireStatus(t, rec, http.StatusBadRequest)
+
+	rec = fx.doJSON(http.MethodPost, "/api/v1/agent/siri", map[string]any{"text": "registra uma observacao para a Luna"}, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var body struct {
+		Reply string `json:"reply"`
+	}
+	decodeJSON(t, rec, &body)
+	requireNonEmpty(t, body.Reply, "agent noop reply")
+	requireEqual(t, 1, countRows(t, fx.db, "agent_invocations"), "agent invocation rows")
+}
+
+func TestAgentSiriEndpointDispatchesToolLoopAndAudits(t *testing.T) {
+	llm := &scriptedAgentLLM{}
+	fx := newFixtureWithAgent(t, llm, agentservice.RouterConfig{})
+	pet := fx.createPet(map[string]any{"name": "Luna", "species": "dog"})
+	llm.outputs = []agentport.LLMOutput{
+		{ToolCalls: []agentdomain.ToolCall{{ID: "call-1", Name: "list_pets", Arguments: map[string]any{}}}},
+		{ToolCalls: []agentdomain.ToolCall{{ID: "call-2", Name: "log_observation", Arguments: map[string]any{
+			"pet_id":      pet.ID,
+			"observed_at": "2026-04-17T15:00:00",
+			"description": "teve diarreia",
+		}}}},
+		{FinalText: "Registrei uma observacao para Luna."},
+	}
+
+	rec := fx.doJSON(http.MethodPost, "/api/v1/agent/siri", map[string]any{"text": "registra que a Luna teve diarreia hoje as 15h"}, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var body struct {
+		Reply string `json:"reply"`
+	}
+	decodeJSON(t, rec, &body)
+	requireEqual(t, "Registrei uma observacao para Luna.", body.Reply, "agent reply")
+	requireEqual(t, 1, countRows(t, fx.db, "pet_observations"), "observation rows")
+	requireEqual(t, 1, countRowsWhere(t, fx.db, "agent_invocations", "outcome = ?", "success"), "success audit rows")
+
+	var toolCalls string
+	if err := fx.db.QueryRow(`SELECT tool_calls_json FROM agent_invocations LIMIT 1`).Scan(&toolCalls); err != nil {
+		t.Fatalf("query tool calls: %v", err)
+	}
+	requireContains(t, toolCalls, "log_observation", "audit tool calls")
+}
+
+func TestAgentSiriEndpointRecordsIterationCapTimeoutAndLLMError(t *testing.T) {
+	t.Run("iteration cap", func(t *testing.T) {
+		llm := &scriptedAgentLLM{outputs: []agentport.LLMOutput{
+			{ToolCalls: []agentdomain.ToolCall{{ID: "call-1", Name: "list_pets"}}},
+		}}
+		fx := newFixtureWithAgent(t, llm, agentservice.RouterConfig{MaxIterations: 1, TotalTimeout: time.Second, CallTimeout: time.Second})
+		rec := fx.doJSON(http.MethodPost, "/api/v1/agent/siri", map[string]any{"text": "listar pets"}, "bearer")
+		requireStatus(t, rec, http.StatusOK)
+		requireEqual(t, 1, countRowsWhere(t, fx.db, "agent_invocations", "outcome = ?", "iteration_cap_hit"), "iteration cap audit rows")
+		requireContains(t, rec.Body.String(), agentservice.IterationCapReply, "iteration cap reply")
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		llm := &scriptedAgentLLM{sleep: 50 * time.Millisecond}
+		fx := newFixtureWithAgent(t, llm, agentservice.RouterConfig{MaxIterations: 5, TotalTimeout: 10 * time.Millisecond, CallTimeout: 10 * time.Millisecond})
+		rec := fx.doJSON(http.MethodPost, "/api/v1/agent/siri", map[string]any{"text": "listar pets"}, "bearer")
+		requireStatus(t, rec, http.StatusOK)
+		requireEqual(t, 1, countRowsWhere(t, fx.db, "agent_invocations", "outcome = ?", "timeout"), "timeout audit rows")
+		requireContains(t, rec.Body.String(), agentservice.TimeoutReply, "timeout reply")
+	})
+
+	t.Run("llm error", func(t *testing.T) {
+		llm := &scriptedAgentLLM{err: errors.New("llm unavailable")}
+		fx := newFixtureWithAgent(t, llm, agentservice.RouterConfig{})
+		rec := fx.doJSON(http.MethodPost, "/api/v1/agent/siri", map[string]any{"text": "listar pets"}, "bearer")
+		requireStatus(t, rec, http.StatusOK)
+		requireEqual(t, 1, countRowsWhere(t, fx.db, "agent_invocations", "outcome = ? AND error_message IS NOT NULL", "llm_error"), "llm error audit rows")
+		requireContains(t, rec.Body.String(), agentservice.LLMErrorReply, "llm error reply")
+	})
 }
 
 func TestPetLifecyclePersistsFieldsAndCalendarSideEffects(t *testing.T) {
