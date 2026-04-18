@@ -116,7 +116,7 @@ func doProfileRequest(t *testing.T, method, path, body string, svc ProfileUseCas
 	e := echo.New()
 	var req *http.Request
 	if body == "" {
-		req = httptest.NewRequest(method, path, nil)
+		req = httptest.NewRequest(method, path, http.NoBody)
 	} else {
 		req = httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)

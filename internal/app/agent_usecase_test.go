@@ -372,14 +372,7 @@ func TestAgentUseCaseDispatchMutationToolsDecodeInputs(t *testing.T) {
 				"observed_at": "2026-04-17T09:30:00",
 				"description": "Vomitou",
 			}),
-			assert: func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
-				t.Helper()
-				in := d.observations.createInput
-				if in.PetID != "pet-1" || in.Description != "Vomitou" || !in.ObservedAt.Equal(observedAt) {
-					t.Fatalf("observation input = %#v, want pet-1/Vomitou/%s", in, observedAt)
-				}
-				assertJSONContains(t, result.Content, "obs-created")
-			},
+			assert: assertObservationInput(observedAt),
 		},
 		{
 			name: "record_vaccine",
@@ -392,20 +385,7 @@ func TestAgentUseCaseDispatchMutationToolsDecodeInputs(t *testing.T) {
 				"batch_number":    "L123",
 				"notes":           "sem reacao",
 			}),
-			assert: func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
-				t.Helper()
-				in := d.vaccines.recordInput
-				if in.PetID != "pet-1" || in.Name != "V10" || !in.AdministeredAt.Equal(administeredAt) {
-					t.Fatalf("vaccine input = %#v", in)
-				}
-				if in.RecurrenceDays == nil || *in.RecurrenceDays != 365 {
-					t.Fatalf("recurrence days = %#v, want 365", in.RecurrenceDays)
-				}
-				assertStringPtr(t, in.VetName, "Dra Ana")
-				assertStringPtr(t, in.BatchNumber, "L123")
-				assertStringPtr(t, in.Notes, "sem reacao")
-				assertJSONContains(t, result.Content, "vac-created")
-			},
+			assert: assertVaccineInput(administeredAt),
 		},
 		{
 			name: "schedule_appointment",
@@ -417,17 +397,7 @@ func TestAgentUseCaseDispatchMutationToolsDecodeInputs(t *testing.T) {
 				"location":     "Centro",
 				"notes":        "banho",
 			}),
-			assert: func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
-				t.Helper()
-				in := d.appointments.createInput
-				if in.PetID != "pet-1" || in.Type != domain.AppointmentTypeGrooming || !in.ScheduledAt.Equal(scheduledAt) {
-					t.Fatalf("appointment input = %#v", in)
-				}
-				assertStringPtr(t, in.Provider, "Pet Shop")
-				assertStringPtr(t, in.Location, "Centro")
-				assertStringPtr(t, in.Notes, "banho")
-				assertJSONContains(t, result.Content, "appt-created")
-			},
+			assert: assertAppointmentInput(scheduledAt),
 		},
 		{
 			name: "start_treatment",
@@ -443,20 +413,7 @@ func TestAgentUseCaseDispatchMutationToolsDecodeInputs(t *testing.T) {
 				"vet_name":       "Dra Ana",
 				"notes":          "com comida",
 			}),
-			assert: func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
-				t.Helper()
-				in := d.treatments.createInput
-				if in.PetID != "pet-1" || in.Name != "Antibiotico" || in.DosageAmount != 2.5 || in.DosageUnit != "ml" || in.Route != "oral" || in.IntervalHours != 12 || !in.StartedAt.Equal(startedAt) {
-					t.Fatalf("treatment input = %#v", in)
-				}
-				if in.EndedAt == nil || !in.EndedAt.Equal(endedAt) {
-					t.Fatalf("ended at = %#v, want %s", in.EndedAt, endedAt)
-				}
-				assertStringPtr(t, in.VetName, "Dra Ana")
-				assertStringPtr(t, in.Notes, "com comida")
-				assertJSONContains(t, result.Content, "tr-created")
-				assertJSONContains(t, result.Content, "dose-created")
-			},
+			assert: assertTreatmentInput(startedAt, endedAt),
 		},
 		{
 			name: "reschedule_appointment",
@@ -465,16 +422,7 @@ func TestAgentUseCaseDispatchMutationToolsDecodeInputs(t *testing.T) {
 				"appointment_id": "appt-1",
 				"scheduled_at":   "2026-04-18T11:00:00",
 			}),
-			assert: func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
-				t.Helper()
-				if d.appointments.updatePetID != "pet-1" || d.appointments.updateAppointmentID != "appt-1" {
-					t.Fatalf("update ids = %q/%q, want pet-1/appt-1", d.appointments.updatePetID, d.appointments.updateAppointmentID)
-				}
-				if d.appointments.updateInput.ScheduledAt == nil || !d.appointments.updateInput.ScheduledAt.Equal(scheduledAt) {
-					t.Fatalf("scheduled at = %#v, want %s", d.appointments.updateInput.ScheduledAt, scheduledAt)
-				}
-				assertJSONContains(t, result.Content, "appt-updated")
-			},
+			assert: assertRescheduleAppointmentInput(scheduledAt),
 		},
 		{
 			name: "create_supply",
@@ -485,15 +433,7 @@ func TestAgentUseCaseDispatchMutationToolsDecodeInputs(t *testing.T) {
 				"estimated_days_supply": float64(30),
 				"notes":                 "pacote 10kg",
 			}),
-			assert: func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
-				t.Helper()
-				in := d.supplies.createInput
-				if in.PetID != "pet-1" || in.Name != "Racao" || in.EstimatedDaysSupply != 30 || !in.LastPurchasedAt.Equal(purchasedAt) {
-					t.Fatalf("supply input = %#v", in)
-				}
-				assertStringPtr(t, in.Notes, "pacote 10kg")
-				assertJSONContains(t, result.Content, "supply-created")
-			},
+			assert: assertCreateSupplyInput(purchasedAt),
 		},
 		{
 			name: "update_supply",
@@ -505,22 +445,7 @@ func TestAgentUseCaseDispatchMutationToolsDecodeInputs(t *testing.T) {
 				"estimated_days_supply": "45",
 				"notes":                 "novo pacote",
 			}),
-			assert: func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
-				t.Helper()
-				if d.supplies.updatePetID != "pet-1" || d.supplies.updateSupplyID != "supply-1" {
-					t.Fatalf("update supply ids = %q/%q, want pet-1/supply-1", d.supplies.updatePetID, d.supplies.updateSupplyID)
-				}
-				in := d.supplies.updateInput
-				assertStringPtr(t, in.Name, "Racao senior")
-				if in.LastPurchasedAt == nil || !in.LastPurchasedAt.Equal(purchasedAt) {
-					t.Fatalf("last purchased at = %#v, want %s", in.LastPurchasedAt, purchasedAt)
-				}
-				if in.EstimatedDaysSupply == nil || *in.EstimatedDaysSupply != 45 {
-					t.Fatalf("estimated days = %#v, want 45", in.EstimatedDaysSupply)
-				}
-				assertStringPtr(t, in.Notes, "novo pacote")
-				assertJSONContains(t, result.Content, "supply-updated")
-			},
+			assert: assertUpdateSupplyInput(purchasedAt),
 		},
 	}
 
@@ -539,6 +464,109 @@ func TestAgentUseCaseDispatchMutationToolsDecodeInputs(t *testing.T) {
 			assertValidJSON(t, result.Content)
 			tc.assert(t, deps, result)
 		})
+	}
+}
+
+func assertObservationInput(observedAt time.Time) func(*testing.T, *agentTestDeps, agentdomain.ToolResult) {
+	return func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
+		t.Helper()
+		in := d.observations.createInput
+		if in.PetID != "pet-1" || in.Description != "Vomitou" || !in.ObservedAt.Equal(observedAt) {
+			t.Fatalf("observation input = %#v, want pet-1/Vomitou/%s", in, observedAt)
+		}
+		assertJSONContains(t, result.Content, "obs-created")
+	}
+}
+
+func assertVaccineInput(administeredAt time.Time) func(*testing.T, *agentTestDeps, agentdomain.ToolResult) {
+	return func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
+		t.Helper()
+		in := d.vaccines.recordInput
+		if in.PetID != "pet-1" || in.Name != "V10" || !in.AdministeredAt.Equal(administeredAt) {
+			t.Fatalf("vaccine input = %#v", in)
+		}
+		if in.RecurrenceDays == nil || *in.RecurrenceDays != 365 {
+			t.Fatalf("recurrence days = %#v, want 365", in.RecurrenceDays)
+		}
+		assertStringPtr(t, in.VetName, "Dra Ana")
+		assertStringPtr(t, in.BatchNumber, "L123")
+		assertStringPtr(t, in.Notes, "sem reacao")
+		assertJSONContains(t, result.Content, "vac-created")
+	}
+}
+
+func assertAppointmentInput(scheduledAt time.Time) func(*testing.T, *agentTestDeps, agentdomain.ToolResult) {
+	return func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
+		t.Helper()
+		in := d.appointments.createInput
+		if in.PetID != "pet-1" || in.Type != domain.AppointmentTypeGrooming || !in.ScheduledAt.Equal(scheduledAt) {
+			t.Fatalf("appointment input = %#v", in)
+		}
+		assertStringPtr(t, in.Provider, "Pet Shop")
+		assertStringPtr(t, in.Location, "Centro")
+		assertStringPtr(t, in.Notes, "banho")
+		assertJSONContains(t, result.Content, "appt-created")
+	}
+}
+
+func assertTreatmentInput(startedAt, endedAt time.Time) func(*testing.T, *agentTestDeps, agentdomain.ToolResult) {
+	return func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
+		t.Helper()
+		in := d.treatments.createInput
+		if in.PetID != "pet-1" || in.Name != "Antibiotico" || in.DosageAmount != 2.5 || in.DosageUnit != "ml" || in.Route != "oral" || in.IntervalHours != 12 || !in.StartedAt.Equal(startedAt) {
+			t.Fatalf("treatment input = %#v", in)
+		}
+		if in.EndedAt == nil || !in.EndedAt.Equal(endedAt) {
+			t.Fatalf("ended at = %#v, want %s", in.EndedAt, endedAt)
+		}
+		assertStringPtr(t, in.VetName, "Dra Ana")
+		assertStringPtr(t, in.Notes, "com comida")
+		assertJSONContains(t, result.Content, "tr-created")
+		assertJSONContains(t, result.Content, "dose-created")
+	}
+}
+
+func assertRescheduleAppointmentInput(scheduledAt time.Time) func(*testing.T, *agentTestDeps, agentdomain.ToolResult) {
+	return func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
+		t.Helper()
+		if d.appointments.updatePetID != "pet-1" || d.appointments.updateAppointmentID != "appt-1" {
+			t.Fatalf("update ids = %q/%q, want pet-1/appt-1", d.appointments.updatePetID, d.appointments.updateAppointmentID)
+		}
+		if d.appointments.updateInput.ScheduledAt == nil || !d.appointments.updateInput.ScheduledAt.Equal(scheduledAt) {
+			t.Fatalf("scheduled at = %#v, want %s", d.appointments.updateInput.ScheduledAt, scheduledAt)
+		}
+		assertJSONContains(t, result.Content, "appt-updated")
+	}
+}
+
+func assertCreateSupplyInput(purchasedAt time.Time) func(*testing.T, *agentTestDeps, agentdomain.ToolResult) {
+	return func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
+		t.Helper()
+		in := d.supplies.createInput
+		if in.PetID != "pet-1" || in.Name != "Racao" || in.EstimatedDaysSupply != 30 || !in.LastPurchasedAt.Equal(purchasedAt) {
+			t.Fatalf("supply input = %#v", in)
+		}
+		assertStringPtr(t, in.Notes, "pacote 10kg")
+		assertJSONContains(t, result.Content, "supply-created")
+	}
+}
+
+func assertUpdateSupplyInput(purchasedAt time.Time) func(*testing.T, *agentTestDeps, agentdomain.ToolResult) {
+	return func(t *testing.T, d *agentTestDeps, result agentdomain.ToolResult) {
+		t.Helper()
+		if d.supplies.updatePetID != "pet-1" || d.supplies.updateSupplyID != "supply-1" {
+			t.Fatalf("update supply ids = %q/%q, want pet-1/supply-1", d.supplies.updatePetID, d.supplies.updateSupplyID)
+		}
+		in := d.supplies.updateInput
+		assertStringPtr(t, in.Name, "Racao senior")
+		if in.LastPurchasedAt == nil || !in.LastPurchasedAt.Equal(purchasedAt) {
+			t.Fatalf("last purchased at = %#v, want %s", in.LastPurchasedAt, purchasedAt)
+		}
+		if in.EstimatedDaysSupply == nil || *in.EstimatedDaysSupply != 45 {
+			t.Fatalf("estimated days = %#v, want 45", in.EstimatedDaysSupply)
+		}
+		assertStringPtr(t, in.Notes, "novo pacote")
+		assertJSONContains(t, result.Content, "supply-updated")
 	}
 }
 

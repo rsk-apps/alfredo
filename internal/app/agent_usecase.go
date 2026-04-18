@@ -77,7 +77,7 @@ func NewAgentUseCase(
 	appointments AppointmentServicer,
 	supplies SupplyServicer,
 	summary SummaryUseCaser,
-	telegram TelegramPort,
+	telegramPort TelegramPort,
 	timezone *time.Location,
 	logger *zap.Logger,
 ) *AgentUseCase {
@@ -93,7 +93,7 @@ func NewAgentUseCase(
 		appointments: appointments,
 		supplies:     supplies,
 		summary:      summary,
-		telegram:     telegram,
+		telegram:     telegramPort,
 		timezone:     timezone,
 		logger:       logger,
 		tools:        buildAgentTools(),
@@ -110,187 +110,192 @@ func (uc *AgentUseCase) Handle(ctx context.Context, inputText string) (string, e
 }
 
 func (uc *AgentUseCase) DispatchToolCall(ctx context.Context, call agentdomain.ToolCall) (agentdomain.ToolResult, error) {
-	var result any
-	switch call.Name {
-	case "list_pets":
-		pets, err := uc.pets.List(ctx)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = pets
-	case "get_pet":
-		petID, err := requireString(call.Arguments, "pet_id")
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		pet, err := uc.pets.GetByID(ctx, petID)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = pet
-	case "list_vaccines":
-		petID, err := requireString(call.Arguments, "pet_id")
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		vaccines, err := uc.vaccines.ListVaccines(ctx, petID)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = vaccines
-	case "list_treatments":
-		petID, err := requireString(call.Arguments, "pet_id")
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		treatments, doses, err := uc.treatments.List(ctx, petID)
-		result = map[string]any{"treatments": treatments, "doses": doses}
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-	case "list_appointments":
-		petID, err := requireString(call.Arguments, "pet_id")
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		appointments, err := uc.appointments.List(ctx, petID)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = appointments
-	case "list_observations":
-		petID, err := requireString(call.Arguments, "pet_id")
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		observations, err := uc.observations.ListByPet(ctx, petID)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = observations
-	case "list_supplies":
-		petID, err := requireString(call.Arguments, "pet_id")
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		supplies, err := uc.supplies.List(ctx, petID)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = supplies
-	case "get_supply":
-		petID, supplyID, err := requireTwoStrings(call.Arguments, "pet_id", "supply_id")
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		supply, err := uc.supplies.GetByID(ctx, petID, supplyID)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = supply
-	case "get_pet_summary":
-		if uc.summary == nil {
-			err := fmt.Errorf("summary use case is not configured")
-			return errorToolResult(call, err), err
-		}
-		summary, err := uc.summary.AllPets(ctx)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = summary
-	case "send_telegram":
-		message, err := requireString(call.Arguments, "message")
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = uc.sendTelegramBestEffort(ctx, message)
-	case "log_observation":
-		in, err := uc.decodeObservation(call.Arguments)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		observation, err := uc.observations.Create(ctx, in)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = observation
-	case "record_vaccine":
-		in, err := uc.decodeVaccine(call.Arguments)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		vaccine, err := uc.vaccines.RecordVaccine(ctx, in)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = vaccine
-	case "schedule_appointment":
-		in, err := uc.decodeAppointment(call.Arguments)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		appointment, err := uc.appointments.Create(ctx, in)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = appointment
-	case "start_treatment":
-		in, err := uc.decodeTreatment(call.Arguments)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		treatment, doses, err := uc.treatments.Create(ctx, in)
-		result = map[string]any{"treatment": treatment, "doses": doses}
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-	case "reschedule_appointment":
-		petID, appointmentID, err := requireTwoStrings(call.Arguments, "pet_id", "appointment_id")
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		scheduledAt, err := uc.requireUserTime(call.Arguments, "scheduled_at")
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		appointment, err := uc.appointments.Update(ctx, petID, appointmentID, service.UpdateAppointmentInput{ScheduledAt: &scheduledAt})
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = appointment
-	case "create_supply":
-		in, err := uc.decodeCreateSupply(call.Arguments)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		supply, err := uc.supplies.Create(ctx, in)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = supply
-	case "update_supply":
-		petID, supplyID, err := requireTwoStrings(call.Arguments, "pet_id", "supply_id")
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		in, err := decodeUpdateSupply(call.Arguments)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		supply, err := uc.supplies.Update(ctx, petID, supplyID, in)
-		if err != nil {
-			return errorToolResult(call, err), err
-		}
-		result = supply
-	default:
+	handlers := uc.toolHandlers()
+	handler, ok := handlers[call.Name]
+	if !ok {
 		err := fmt.Errorf("unknown tool %q", call.Name)
 		return errorToolResult(call, err), err
 	}
+
+	result, err := handler(ctx, call)
+	if err != nil {
+		return errorToolResult(call, err), err
+	}
+
 	content, err := json.Marshal(result)
 	if err != nil {
 		return errorToolResult(call, err), fmt.Errorf("marshal tool result for %q: %w", call.Name, err)
 	}
 	return agentdomain.ToolResult{CallID: call.ID, Content: string(content)}, nil
+}
+
+func (uc *AgentUseCase) toolHandlers() map[string]func(context.Context, agentdomain.ToolCall) (any, error) {
+	return map[string]func(context.Context, agentdomain.ToolCall) (any, error){
+		"list_pets":              uc.toolListPets,
+		"get_pet":                uc.toolGetPet,
+		"list_vaccines":          uc.toolListVaccines,
+		"list_treatments":        uc.toolListTreatments,
+		"list_appointments":      uc.toolListAppointments,
+		"list_observations":      uc.toolListObservations,
+		"list_supplies":          uc.toolListSupplies,
+		"get_supply":             uc.toolGetSupply,
+		"get_pet_summary":        uc.toolGetPetSummary,
+		"send_telegram":          uc.toolSendTelegram,
+		"log_observation":        uc.toolLogObservation,
+		"record_vaccine":         uc.toolRecordVaccine,
+		"schedule_appointment":   uc.toolScheduleAppointment,
+		"start_treatment":        uc.toolStartTreatment,
+		"reschedule_appointment": uc.toolRescheduleAppointment,
+		"create_supply":          uc.toolCreateSupply,
+		"update_supply":          uc.toolUpdateSupply,
+	}
+}
+
+func (uc *AgentUseCase) toolListPets(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	return uc.pets.List(ctx)
+}
+
+func (uc *AgentUseCase) toolGetPet(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	petID, err := requireString(call.Arguments, "pet_id")
+	if err != nil {
+		return nil, err
+	}
+	return uc.pets.GetByID(ctx, petID)
+}
+
+func (uc *AgentUseCase) toolListVaccines(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	petID, err := requireString(call.Arguments, "pet_id")
+	if err != nil {
+		return nil, err
+	}
+	return uc.vaccines.ListVaccines(ctx, petID)
+}
+
+func (uc *AgentUseCase) toolListTreatments(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	petID, err := requireString(call.Arguments, "pet_id")
+	if err != nil {
+		return nil, err
+	}
+	treatments, doses, err := uc.treatments.List(ctx, petID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"treatments": treatments, "doses": doses}, nil
+}
+
+func (uc *AgentUseCase) toolListAppointments(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	petID, err := requireString(call.Arguments, "pet_id")
+	if err != nil {
+		return nil, err
+	}
+	return uc.appointments.List(ctx, petID)
+}
+
+func (uc *AgentUseCase) toolListObservations(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	petID, err := requireString(call.Arguments, "pet_id")
+	if err != nil {
+		return nil, err
+	}
+	return uc.observations.ListByPet(ctx, petID)
+}
+
+func (uc *AgentUseCase) toolListSupplies(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	petID, err := requireString(call.Arguments, "pet_id")
+	if err != nil {
+		return nil, err
+	}
+	return uc.supplies.List(ctx, petID)
+}
+
+func (uc *AgentUseCase) toolGetSupply(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	petID, supplyID, err := requireTwoStrings(call.Arguments, "pet_id", "supply_id")
+	if err != nil {
+		return nil, err
+	}
+	return uc.supplies.GetByID(ctx, petID, supplyID)
+}
+
+func (uc *AgentUseCase) toolGetPetSummary(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	if uc.summary == nil {
+		return nil, fmt.Errorf("summary use case is not configured")
+	}
+	return uc.summary.AllPets(ctx)
+}
+
+func (uc *AgentUseCase) toolSendTelegram(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	message, err := requireString(call.Arguments, "message")
+	if err != nil {
+		return nil, err
+	}
+	return uc.sendTelegramBestEffort(ctx, message), nil
+}
+
+func (uc *AgentUseCase) toolLogObservation(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	in, err := uc.decodeObservation(call.Arguments)
+	if err != nil {
+		return nil, err
+	}
+	return uc.observations.Create(ctx, in)
+}
+
+func (uc *AgentUseCase) toolRecordVaccine(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	in, err := uc.decodeVaccine(call.Arguments)
+	if err != nil {
+		return nil, err
+	}
+	return uc.vaccines.RecordVaccine(ctx, in)
+}
+
+func (uc *AgentUseCase) toolScheduleAppointment(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	in, err := uc.decodeAppointment(call.Arguments)
+	if err != nil {
+		return nil, err
+	}
+	return uc.appointments.Create(ctx, in)
+}
+
+func (uc *AgentUseCase) toolStartTreatment(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	in, err := uc.decodeTreatment(call.Arguments)
+	if err != nil {
+		return nil, err
+	}
+	treatment, doses, err := uc.treatments.Create(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"treatment": treatment, "doses": doses}, nil
+}
+
+func (uc *AgentUseCase) toolRescheduleAppointment(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	petID, appointmentID, err := requireTwoStrings(call.Arguments, "pet_id", "appointment_id")
+	if err != nil {
+		return nil, err
+	}
+	scheduledAt, err := uc.requireUserTime(call.Arguments, "scheduled_at")
+	if err != nil {
+		return nil, err
+	}
+	return uc.appointments.Update(ctx, petID, appointmentID, service.UpdateAppointmentInput{ScheduledAt: &scheduledAt})
+}
+
+func (uc *AgentUseCase) toolCreateSupply(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	in, err := uc.decodeCreateSupply(call.Arguments)
+	if err != nil {
+		return nil, err
+	}
+	return uc.supplies.Create(ctx, in)
+}
+
+func (uc *AgentUseCase) toolUpdateSupply(ctx context.Context, call agentdomain.ToolCall) (any, error) {
+	petID, supplyID, err := requireTwoStrings(call.Arguments, "pet_id", "supply_id")
+	if err != nil {
+		return nil, err
+	}
+	in, err := decodeUpdateSupply(call.Arguments)
+	if err != nil {
+		return nil, err
+	}
+	return uc.supplies.Update(ctx, petID, supplyID, in)
 }
 
 func (uc *AgentUseCase) sendTelegramBestEffort(ctx context.Context, message string) map[string]string {
@@ -496,12 +501,12 @@ func (uc *AgentUseCase) parseUserTime(text, key string) (time.Time, error) {
 	return t, nil
 }
 
-func requireTwoStrings(args map[string]any, a, b string) (string, string, error) {
-	first, err := requireString(args, a)
+func requireTwoStrings(args map[string]any, a, b string) (first, second string, err error) {
+	first, err = requireString(args, a)
 	if err != nil {
 		return "", "", err
 	}
-	second, err := requireString(args, b)
+	second, err = requireString(args, b)
 	if err != nil {
 		return "", "", err
 	}

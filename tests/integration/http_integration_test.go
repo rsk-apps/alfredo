@@ -187,7 +187,7 @@ func (c *recordingCalendar) CreateEvent(_ context.Context, calendarID string, ev
 	return id, nil
 }
 
-func (c *recordingCalendar) UpdateEvent(_ context.Context, calendarID string, eventID string, event gcalendar.Event) error {
+func (c *recordingCalendar) UpdateEvent(_ context.Context, calendarID, eventID string, event gcalendar.Event) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.createdEvents = append(c.createdEvents, createdEvent{CalendarID: calendarID, Event: event, ID: eventID})
@@ -206,7 +206,7 @@ func (c *recordingCalendar) CreateRecurringEvent(_ context.Context, calendarID s
 	return id, nil
 }
 
-func (c *recordingCalendar) StopRecurringEvent(_ context.Context, calendarID string, eventID string, until time.Time) error {
+func (c *recordingCalendar) StopRecurringEvent(_ context.Context, calendarID, eventID string, until time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.failStopRecurringEvent != nil {
@@ -216,7 +216,7 @@ func (c *recordingCalendar) StopRecurringEvent(_ context.Context, calendarID str
 	return nil
 }
 
-func (c *recordingCalendar) DeleteEvent(_ context.Context, calendarID string, eventID string) error {
+func (c *recordingCalendar) DeleteEvent(_ context.Context, calendarID, eventID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.failDeleteEvent != nil {
@@ -1453,7 +1453,7 @@ func requireEqual[T comparable](t requireT, want, got T, label string) {
 	}
 }
 
-func requireNonEmpty(t requireT, got string, label string) {
+func requireNonEmpty(t requireT, got, label string) {
 	t.Helper()
 	if got == "" {
 		t.Fatalf("%s is empty", label)

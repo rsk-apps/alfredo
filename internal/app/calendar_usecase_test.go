@@ -66,7 +66,7 @@ func (c *calendarFake) CreateEvent(_ context.Context, _ string, event gcalendar.
 	c.createEventCalls++
 	return id, nil
 }
-func (c *calendarFake) UpdateEvent(_ context.Context, _ string, _ string, event gcalendar.Event) error {
+func (c *calendarFake) UpdateEvent(_ context.Context, _, _ string, event gcalendar.Event) error {
 	c.updatedEvents = append(c.updatedEvents, event)
 	return nil
 }
@@ -76,7 +76,7 @@ func (c *calendarFake) CreateRecurringEvent(context.Context, string, gcalendar.E
 func (c *calendarFake) StopRecurringEvent(context.Context, string, string, time.Time) error {
 	return nil
 }
-func (c *calendarFake) DeleteEvent(_ context.Context, _ string, eventID string) error {
+func (c *calendarFake) DeleteEvent(_ context.Context, _, eventID string) error {
 	c.deletedEvents = append(c.deletedEvents, eventID)
 	return nil
 }
@@ -116,9 +116,9 @@ func (r *vaccineRepoStub) CreateVaccine(_ context.Context, v domain.Vaccine) (*d
 	if r.createErr != nil {
 		return nil, r.createErr
 	}
-	copy := v
-	r.last = &copy
-	return &copy, nil
+	vc := v
+	r.last = &vc
+	return &vc, nil
 }
 func (r *vaccineRepoStub) GetVaccine(context.Context, string, string) (*domain.Vaccine, error) {
 	return r.last, nil
@@ -130,9 +130,9 @@ type treatmentRepoStub struct {
 }
 
 func (r *treatmentRepoStub) Create(_ context.Context, t domain.Treatment) (*domain.Treatment, error) {
-	copy := t
-	r.last = &copy
-	return &copy, nil
+	tc := t
+	r.last = &tc
+	return &tc, nil
 }
 func (r *treatmentRepoStub) GetByID(context.Context, string, string) (*domain.Treatment, error) {
 	return r.last, nil

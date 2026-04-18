@@ -37,16 +37,23 @@ func TestObservationRepository_RoundTripOrdersByObservedAtAndCascades(t *testing
 	}
 
 	repo := sqlite.NewObservationRepository(db)
-	older := domain.Observation{
+	older, newer := createTestObservations(ctx, t, repo, pet.ID)
+	testObservationOrdering(t, repo, ctx, pet.ID, older, newer)
+	testObservationCascadeDelete(t, petRepo, repo, ctx, pet.ID)
+}
+
+func createTestObservations(ctx context.Context, t *testing.T, repo *sqlite.ObservationRepository, petID string) (older, newer domain.Observation) {
+	t.Helper()
+	older = domain.Observation{
 		ID:          "obs-old",
-		PetID:       pet.ID,
+		PetID:       petID,
 		ObservedAt:  time.Date(2026, 4, 14, 9, 0, 0, 0, time.FixedZone("BRT", -3*60*60)),
 		Description: "Tired",
 		CreatedAt:   time.Date(2026, 4, 14, 9, 1, 0, 0, time.UTC),
 	}
-	newer := domain.Observation{
+	newer = domain.Observation{
 		ID:          "obs-new",
-		PetID:       pet.ID,
+		PetID:       petID,
 		ObservedAt:  time.Date(2026, 4, 15, 9, 0, 0, 0, time.UTC),
 		Description: "Vomited",
 		CreatedAt:   time.Date(2026, 4, 15, 9, 1, 0, 0, time.UTC),
@@ -57,8 +64,12 @@ func TestObservationRepository_RoundTripOrdersByObservedAtAndCascades(t *testing
 	if _, err := repo.Create(ctx, newer); err != nil {
 		t.Fatalf("create newer observation: %v", err)
 	}
+	return older, newer
+}
 
-	listed, err := repo.ListByPet(ctx, pet.ID)
+func testObservationOrdering(t *testing.T, repo *sqlite.ObservationRepository, ctx context.Context, petID string, older, newer domain.Observation) {
+	t.Helper()
+	listed, err := repo.ListByPet(ctx, petID)
 	if err != nil {
 		t.Fatalf("list observations: %v", err)
 	}
@@ -69,7 +80,7 @@ func TestObservationRepository_RoundTripOrdersByObservedAtAndCascades(t *testing
 		t.Fatalf("unexpected order: %#v", listed)
 	}
 
-	fetched, err := repo.GetByID(ctx, pet.ID, older.ID)
+	fetched, err := repo.GetByID(ctx, petID, older.ID)
 	if err != nil {
 		t.Fatalf("get observation: %v", err)
 	}
@@ -80,15 +91,18 @@ func TestObservationRepository_RoundTripOrdersByObservedAtAndCascades(t *testing
 		t.Fatalf("observed_at = %s, want %s", got, want)
 	}
 
-	_, err = repo.GetByID(ctx, pet.ID, "missing")
+	_, err = repo.GetByID(ctx, petID, "missing")
 	if !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("missing error = %v, want ErrNotFound", err)
 	}
+}
 
-	if err := petRepo.Delete(ctx, pet.ID); err != nil {
+func testObservationCascadeDelete(t *testing.T, petRepo *sqlite.PetRepository, repo *sqlite.ObservationRepository, ctx context.Context, petID string) {
+	t.Helper()
+	if err := petRepo.Delete(ctx, petID); err != nil {
 		t.Fatalf("delete pet: %v", err)
 	}
-	listed, err = repo.ListByPet(ctx, pet.ID)
+	listed, err := repo.ListByPet(ctx, petID)
 	if err != nil {
 		t.Fatalf("list after cascade: %v", err)
 	}

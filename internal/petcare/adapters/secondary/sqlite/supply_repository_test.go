@@ -16,9 +16,24 @@ func TestSupplyRepository_CRUDPetScopeAndListOrdering(t *testing.T) {
 	insertTestPet(t, db, "pet-1")
 	insertTestPet(t, db, "pet-2")
 
-	notes := "Comprar no Petlove"
 	createdAt := time.Date(2026, 4, 16, 12, 0, 0, 0, time.UTC)
-	for _, supply := range []domain.Supply{
+	supplies := createTestSupplies(createdAt)
+	for _, supply := range supplies {
+		if _, err := repo.Create(ctx, supply); err != nil {
+			t.Fatalf("create supply %q: %v", supply.ID, err)
+		}
+	}
+
+	testSupplyGet(t, repo, ctx)
+	testSupplyWrongPet(t, repo, ctx)
+	testSupplyList(t, repo, ctx)
+	testSupplyUpdate(t, repo, ctx, createdAt)
+	testSupplyDelete(t, repo, ctx)
+}
+
+func createTestSupplies(createdAt time.Time) []domain.Supply {
+	notes := "Comprar no Petlove"
+	return []domain.Supply{
 		{
 			ID:                  "supply-1",
 			PetID:               "pet-1",
@@ -47,12 +62,12 @@ func TestSupplyRepository_CRUDPetScopeAndListOrdering(t *testing.T) {
 			CreatedAt:           createdAt,
 			UpdatedAt:           createdAt,
 		},
-	} {
-		if _, err := repo.Create(ctx, supply); err != nil {
-			t.Fatalf("create supply %q: %v", supply.ID, err)
-		}
 	}
+}
 
+func testSupplyGet(t *testing.T, repo *SupplyRepository, ctx context.Context) {
+	t.Helper()
+	notes := "Comprar no Petlove"
 	got, err := repo.GetByID(ctx, "pet-1", "supply-1")
 	if err != nil {
 		t.Fatalf("get supply: %v", err)
@@ -66,12 +81,18 @@ func TestSupplyRepository_CRUDPetScopeAndListOrdering(t *testing.T) {
 	if got.NextReorderAt().Format("2006-01-02") != "2026-05-16" {
 		t.Fatalf("next reorder = %v", got.NextReorderAt())
 	}
+}
 
-	_, err = repo.GetByID(ctx, "pet-2", "supply-1")
+func testSupplyWrongPet(t *testing.T, repo *SupplyRepository, ctx context.Context) {
+	t.Helper()
+	_, err := repo.GetByID(ctx, "pet-2", "supply-1")
 	if !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("wrong pet get error = %v, want ErrNotFound", err)
 	}
+}
 
+func testSupplyList(t *testing.T, repo *SupplyRepository, ctx context.Context) {
+	t.Helper()
 	listed, err := repo.List(ctx, "pet-1")
 	if err != nil {
 		t.Fatalf("list supplies: %v", err)
@@ -86,7 +107,14 @@ func TestSupplyRepository_CRUDPetScopeAndListOrdering(t *testing.T) {
 			t.Fatalf("list order = %#v, want %#v", gotOrder, wantOrder)
 		}
 	}
+}
 
+func testSupplyUpdate(t *testing.T, repo *SupplyRepository, ctx context.Context, createdAt time.Time) {
+	t.Helper()
+	got, err := repo.GetByID(ctx, "pet-1", "supply-1")
+	if err != nil {
+		t.Fatalf("get supply for update: %v", err)
+	}
 	updatedNotes := "Novo pacote aberto"
 	got.Name = "Updated Food"
 	got.Notes = &updatedNotes
@@ -98,8 +126,11 @@ func TestSupplyRepository_CRUDPetScopeAndListOrdering(t *testing.T) {
 	if updated.Name != "Updated Food" || updated.Notes == nil || *updated.Notes != updatedNotes {
 		t.Fatalf("updated supply = %#v", updated)
 	}
+}
 
-	err = repo.Delete(ctx, "pet-2", "supply-1")
+func testSupplyDelete(t *testing.T, repo *SupplyRepository, ctx context.Context) {
+	t.Helper()
+	err := repo.Delete(ctx, "pet-2", "supply-1")
 	if !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("wrong pet delete error = %v, want ErrNotFound", err)
 	}

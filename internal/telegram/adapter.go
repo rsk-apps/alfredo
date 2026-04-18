@@ -104,7 +104,7 @@ func sanitizeText(s string) string {
 	return s
 }
 
-func redactToken(s string, token string) string {
+func redactToken(s, token string) string {
 	if token == "" {
 		return s
 	}

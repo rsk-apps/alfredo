@@ -22,7 +22,7 @@ func TestAPIKeyAuth(t *testing.T) {
 	}
 
 	t.Run("valid Bearer token passes", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("Authorization", "Bearer "+validKey)
 		rec, err := apply(req)
 		if err != nil {
@@ -34,7 +34,7 @@ func TestAPIKeyAuth(t *testing.T) {
 	})
 
 	t.Run("valid X-Api-Key passes", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("X-Api-Key", validKey)
 		_, err := apply(req)
 		if err != nil {
@@ -43,7 +43,7 @@ func TestAPIKeyAuth(t *testing.T) {
 	})
 
 	t.Run("missing key returns 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		_, err := apply(req)
 		if err == nil {
 			t.Fatal("expected error, got nil")
@@ -58,7 +58,7 @@ func TestAPIKeyAuth(t *testing.T) {
 	})
 
 	t.Run("wrong key returns 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("Authorization", "Bearer wrong-key")
 		_, err := apply(req)
 		if err == nil {
@@ -74,7 +74,7 @@ func TestAPIKeyAuth(t *testing.T) {
 	})
 
 	t.Run("Bearer prefix required — key in wrong format returns 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 		req.Header.Set("Authorization", validKey) // no "Bearer " prefix
 		_, err := apply(req)
 		if err == nil {

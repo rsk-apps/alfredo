@@ -27,6 +27,65 @@ import (
 
 var version = "dev"
 
+func initCalendarAdapter(cfg *config.Config, zapLogger *zap.Logger) (app.CalendarPort, error) {
+	if cfg.GCalendar.ClientID != "" && cfg.GCalendar.ClientSecret != "" && cfg.GCalendar.RefreshToken != "" {
+		adapter, err := gcalendar.NewAdapter(context.Background(), gcalendar.AdapterConfig{
+			ClientID:     cfg.GCalendar.ClientID,
+			ClientSecret: cfg.GCalendar.ClientSecret,
+			RefreshToken: cfg.GCalendar.RefreshToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+		zapLogger.Info("gcalendar adapter enabled", zap.String("mode", "google"))
+		return adapter, nil
+	}
+	zapLogger.Warn("gcalendar noop adapter enabled",
+		zap.String("mode", "noop"),
+		zap.Bool("client_id_set", cfg.GCalendar.ClientID != ""),
+		zap.Bool("client_secret_set", cfg.GCalendar.ClientSecret != ""),
+		zap.Bool("refresh_token_set", cfg.GCalendar.RefreshToken != ""),
+	)
+	return gcalendar.NewNoopAdapter(zapLogger), nil
+}
+
+func initTelegramAdapter(cfg *config.Config, zapLogger *zap.Logger) (app.TelegramPort, error) {
+	if cfg.Telegram.BotToken != "" && cfg.Telegram.ChatID != "" {
+		adapter, err := telegram.NewAdapter(telegram.AdapterConfig{
+			BotToken: cfg.Telegram.BotToken,
+			ChatID:   cfg.Telegram.ChatID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		zapLogger.Info("telegram adapter enabled", zap.String("mode", "telegram"))
+		return adapter, nil
+	}
+	zapLogger.Warn("telegram noop adapter enabled",
+		zap.String("mode", "noop"),
+		zap.Bool("bot_token_set", cfg.Telegram.BotToken != ""),
+		zap.Bool("chat_id_set", cfg.Telegram.ChatID != ""),
+	)
+	return telegram.NewNoopAdapter(zapLogger), nil
+}
+
+func initAgentLLM(cfg *config.Config, zapLogger *zap.Logger) (agentport.LLMClient, error) {
+	if cfg.Agent.AnthropicAPIKey != "" {
+		adapter, err := agentclaude.NewAdapter(agentclaude.Config{
+			APIKey:      cfg.Agent.AnthropicAPIKey,
+			Model:       cfg.Agent.Model,
+			CallTimeout: time.Duration(cfg.Agent.CallTimeoutSeconds) * time.Second,
+		})
+		if err != nil {
+			return nil, err
+		}
+		zapLogger.Info("agent llm adapter enabled", zap.String("mode", "claude"), zap.String("model", cfg.Agent.Model))
+		return adapter, nil
+	}
+	zapLogger.Warn("agent noop llm adapter enabled", zap.String("mode", "noop"))
+	return agentnoop.NewAdapter(zapLogger), nil
+}
+
 func main() {
 	// 1. Load config
 	cfg, err := config.Load()
@@ -67,62 +126,22 @@ func main() {
 		zapLogger.Fatal("timezone load failed", zap.String("timezone", cfg.App.Timezone), zap.Error(err))
 	}
 
-	// 5. Calendar adapter (no-op when credentials are absent)
-	var calendarAdapter app.CalendarPort
-	if cfg.GCalendar.ClientID != "" && cfg.GCalendar.ClientSecret != "" && cfg.GCalendar.RefreshToken != "" {
-		calendarAdapter, err = gcalendar.NewAdapter(context.Background(), gcalendar.AdapterConfig{
-			ClientID:     cfg.GCalendar.ClientID,
-			ClientSecret: cfg.GCalendar.ClientSecret,
-			RefreshToken: cfg.GCalendar.RefreshToken,
-		})
-		if err != nil {
-			zapLogger.Fatal("gcalendar init failed", zap.Error(err))
-		}
-		zapLogger.Info("gcalendar adapter enabled", zap.String("mode", "google"))
-	} else {
-		calendarAdapter = gcalendar.NewNoopAdapter(zapLogger)
-		zapLogger.Warn("gcalendar noop adapter enabled",
-			zap.String("mode", "noop"),
-			zap.Bool("client_id_set", cfg.GCalendar.ClientID != ""),
-			zap.Bool("client_secret_set", cfg.GCalendar.ClientSecret != ""),
-			zap.Bool("refresh_token_set", cfg.GCalendar.RefreshToken != ""),
-		)
+	// 5. Calendar adapter
+	calendarAdapter, err := initCalendarAdapter(cfg, zapLogger)
+	if err != nil {
+		zapLogger.Fatal("gcalendar init failed", zap.Error(err))
 	}
 
-	// 6. Telegram adapter (no-op when credentials are absent)
-	var telegramAdapter app.TelegramPort
-	if cfg.Telegram.BotToken != "" && cfg.Telegram.ChatID != "" {
-		telegramAdapter, err = telegram.NewAdapter(telegram.AdapterConfig{
-			BotToken: cfg.Telegram.BotToken,
-			ChatID:   cfg.Telegram.ChatID,
-		})
-		if err != nil {
-			zapLogger.Fatal("telegram init failed", zap.Error(err))
-		}
-		zapLogger.Info("telegram adapter enabled", zap.String("mode", "telegram"))
-	} else {
-		telegramAdapter = telegram.NewNoopAdapter(zapLogger)
-		zapLogger.Warn("telegram noop adapter enabled",
-			zap.String("mode", "noop"),
-			zap.Bool("bot_token_set", cfg.Telegram.BotToken != ""),
-			zap.Bool("chat_id_set", cfg.Telegram.ChatID != ""),
-		)
+	// 6. Telegram adapter
+	telegramAdapter, err := initTelegramAdapter(cfg, zapLogger)
+	if err != nil {
+		zapLogger.Fatal("telegram init failed", zap.Error(err))
 	}
 
-	var agentLLM agentport.LLMClient
-	if cfg.Agent.AnthropicAPIKey != "" {
-		agentLLM, err = agentclaude.NewAdapter(agentclaude.Config{
-			APIKey:      cfg.Agent.AnthropicAPIKey,
-			Model:       cfg.Agent.Model,
-			CallTimeout: time.Duration(cfg.Agent.CallTimeoutSeconds) * time.Second,
-		})
-		if err != nil {
-			zapLogger.Fatal("agent claude init failed", zap.Error(err))
-		}
-		zapLogger.Info("agent llm adapter enabled", zap.String("mode", "claude"), zap.String("model", cfg.Agent.Model))
-	} else {
-		agentLLM = agentnoop.NewAdapter(zapLogger)
-		zapLogger.Warn("agent noop llm adapter enabled", zap.String("mode", "noop"))
+	// 7. Agent LLM adapter
+	agentLLM, err := initAgentLLM(cfg, zapLogger)
+	if err != nil {
+		zapLogger.Fatal("agent init failed", zap.Error(err))
 	}
 
 	e, err := httpserver.New(httpserver.Config{
@@ -144,7 +163,7 @@ func main() {
 		zapLogger.Fatal("server wiring failed", zap.Error(err))
 	}
 
-	// 14. Start server with graceful shutdown
+	// 8. Start server with graceful shutdown
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	zapLogger.Info("alfredo starting", zap.String("addr", addr), zap.String("version", version))
 

@@ -1,12 +1,13 @@
 version: "2"
 
 run:
-  timeout: 3m
+  timeout: 5m
   modules-download-mode: readonly
 
 linters:
   default: standard
   enable:
+    # Existing
     - errcheck
     - govet
     - ineffassign
@@ -17,6 +18,12 @@ linters:
     - godot
     - prealloc
     - revive
+    # Security — blocks on HIGH severity and above
+    - gosec
+    # Code smells
+    - gocritic
+    - cyclop
+    - dupl
   settings:
     errcheck:
       check-type-assertions: true
@@ -28,3 +35,23 @@ linters:
           disabled: true
         - name: var-naming
           disabled: true
+    gosec:
+      severity: high
+      confidence: medium
+      excludes:
+        - G304  # filepath as taint input — common false positive in config loading
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+        - whyNoLint
+        - appendAssign
+    cyclop:
+      max-complexity: 15
+      skip-tests: true
+    dupl:
+      threshold: 150

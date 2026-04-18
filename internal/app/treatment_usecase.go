@@ -177,54 +177,19 @@ func (uc *TreatmentUseCase) Stop(ctx context.Context, petID, treatmentID string)
 	)
 	now := time.Now().UTC()
 	err := uc.txRunner.WithinTx(ctx, func(pets *service.PetService, _ *service.VaccineService, treatments *service.TreatmentService, doses *service.DoseService) error {
-		loadedPet, err := pets.GetByID(ctx, petID)
-		if err != nil {
-			return fmt.Errorf("load pet %q: %w", petID, err)
+		var innerErr error
+		pet, tr, innerErr = uc.loadPetAndTreatment(ctx, pets, treatments, petID, treatmentID)
+		if innerErr != nil {
+			return innerErr
 		}
-		pet = loadedPet
-		loadedTreatment, err := treatments.GetByID(ctx, petID, treatmentID)
-		if err != nil {
-			return fmt.Errorf("load treatment %q: %w", treatmentID, err)
-		}
-		tr = loadedTreatment
 
 		if tr.EndedAt == nil {
-			if tr.GoogleCalendarEventID != "" {
-				if err := uc.calendar.StopRecurringEvent(ctx, pet.GoogleCalendarID, tr.GoogleCalendarEventID, now); err != nil {
-					return fmt.Errorf("stop recurring treatment event %q: %w", tr.GoogleCalendarEventID, err)
-				}
-				externalChanged = true
-			}
-			if err := treatments.Stop(ctx, petID, treatmentID); err != nil {
-				return fmt.Errorf("stop treatment %q: %w", treatmentID, err)
-			}
-			return nil
+			externalChanged, innerErr = uc.stopOngoingTreatment(ctx, pet, tr, treatments)
+			return innerErr
 		}
 
-		allDoses, err = doses.ListByTreatment(ctx, treatmentID)
-		if err != nil {
-			return fmt.Errorf("list doses for treatment %q: %w", treatmentID, err)
-		}
-		futureDoses, err = doses.ListFutureByTreatment(ctx, treatmentID, now)
-		if err != nil {
-			return fmt.Errorf("list future doses for treatment %q: %w", treatmentID, err)
-		}
-		for _, dose := range futureDoses {
-			if dose.GoogleCalendarEventID == "" {
-				continue
-			}
-			if err := uc.calendar.DeleteEvent(ctx, pet.GoogleCalendarID, dose.GoogleCalendarEventID); err != nil {
-				return fmt.Errorf("delete dose calendar event %q: %w", dose.GoogleCalendarEventID, err)
-			}
-			externalChanged = true
-		}
-		if err := treatments.Stop(ctx, petID, treatmentID); err != nil {
-			return fmt.Errorf("stop treatment %q: %w", treatmentID, err)
-		}
-		if err := doses.DeleteFutureByTreatment(ctx, treatmentID, now); err != nil {
-			return fmt.Errorf("delete future doses for treatment %q: %w", treatmentID, err)
-		}
-		return nil
+		allDoses, futureDoses, externalChanged, innerErr = uc.stopFiniteTreatment(ctx, pet, tr, treatments, doses, now)
+		return innerErr
 	})
 	if err != nil && externalChanged && errors.Is(err, ErrTxCommit) {
 		uc.logger.Error("treatment stop committed external change before local commit failed",
@@ -239,6 +204,60 @@ func (uc *TreatmentUseCase) Stop(ctx context.Context, petID, treatmentID string)
 		uc.sendTelegram(ctx, formatTreatmentStoppedMessage(pet, tr, allDoses, futureDoses, now, uc.timezone), zap.String("pet_id", petID), zap.String("treatment_id", treatmentID))
 	}
 	return err
+}
+
+func (uc *TreatmentUseCase) loadPetAndTreatment(ctx context.Context, pets *service.PetService, treatments *service.TreatmentService, petID, treatmentID string) (*domain.Pet, *domain.Treatment, error) {
+	pet, err := pets.GetByID(ctx, petID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load pet %q: %w", petID, err)
+	}
+	tr, err := treatments.GetByID(ctx, petID, treatmentID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load treatment %q: %w", treatmentID, err)
+	}
+	return pet, tr, nil
+}
+
+func (uc *TreatmentUseCase) stopOngoingTreatment(ctx context.Context, pet *domain.Pet, tr *domain.Treatment, treatments *service.TreatmentService) (bool, error) {
+	externalChanged := false
+	if tr.GoogleCalendarEventID != "" {
+		if err := uc.calendar.StopRecurringEvent(ctx, pet.GoogleCalendarID, tr.GoogleCalendarEventID, time.Now().UTC()); err != nil {
+			return false, fmt.Errorf("stop recurring treatment event %q: %w", tr.GoogleCalendarEventID, err)
+		}
+		externalChanged = true
+	}
+	if err := treatments.Stop(ctx, pet.ID, tr.ID); err != nil {
+		return externalChanged, fmt.Errorf("stop treatment %q: %w", tr.ID, err)
+	}
+	return externalChanged, nil
+}
+
+func (uc *TreatmentUseCase) stopFiniteTreatment(ctx context.Context, pet *domain.Pet, tr *domain.Treatment, treatments *service.TreatmentService, doses *service.DoseService, now time.Time) (allDoses, futureDoses []domain.Dose, externalChanged bool, err error) {
+	allDoses, err = doses.ListByTreatment(ctx, tr.ID)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("list doses for treatment %q: %w", tr.ID, err)
+	}
+	futureDoses, err = doses.ListFutureByTreatment(ctx, tr.ID, now)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("list future doses for treatment %q: %w", tr.ID, err)
+	}
+	externalChanged = false
+	for _, dose := range futureDoses {
+		if dose.GoogleCalendarEventID == "" {
+			continue
+		}
+		if err := uc.calendar.DeleteEvent(ctx, pet.GoogleCalendarID, dose.GoogleCalendarEventID); err != nil {
+			return nil, nil, false, fmt.Errorf("delete dose calendar event %q: %w", dose.GoogleCalendarEventID, err)
+		}
+		externalChanged = true
+	}
+	if err := treatments.Stop(ctx, pet.ID, tr.ID); err != nil {
+		return nil, nil, externalChanged, fmt.Errorf("stop treatment %q: %w", tr.ID, err)
+	}
+	if err := doses.DeleteFutureByTreatment(ctx, tr.ID, now); err != nil {
+		return nil, nil, externalChanged, fmt.Errorf("delete future doses for treatment %q: %w", tr.ID, err)
+	}
+	return allDoses, futureDoses, externalChanged, nil
 }
 
 func (uc *TreatmentUseCase) compensateEvents(ctx context.Context, calendarID string, eventIDs []string, tr *domain.Treatment) {
@@ -285,7 +304,7 @@ func formatTreatmentCreatedMessage(pet *domain.Pet, treatment *domain.Treatment,
 	return telegram.Message{Text: b.String(), ParseMode: telegram.ParseModeHTML}
 }
 
-func formatTreatmentStoppedMessage(pet *domain.Pet, treatment *domain.Treatment, allDoses []domain.Dose, futureDoses []domain.Dose, stoppedAt time.Time, timezone string) telegram.Message {
+func formatTreatmentStoppedMessage(pet *domain.Pet, treatment *domain.Treatment, allDoses, futureDoses []domain.Dose, stoppedAt time.Time, timezone string) telegram.Message {
 	var b strings.Builder
 	if treatment.EndedAt == nil {
 		b.WriteString("<b>⛔ Tratamento contínuo interrompido</b>\n\n")

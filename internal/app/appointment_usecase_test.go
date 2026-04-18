@@ -66,21 +66,21 @@ func (f *appointmentServiceFake) Update(_ context.Context, _, _ string, in servi
 	if f.stored == nil {
 		return nil, domain.ErrNotFound
 	}
-	copy := *f.stored
+	updated := *f.stored
 	if in.ScheduledAt != nil {
-		copy.ScheduledAt = *in.ScheduledAt
+		updated.ScheduledAt = *in.ScheduledAt
 	}
 	if in.Provider != nil {
-		copy.Provider = in.Provider
+		updated.Provider = in.Provider
 	}
 	if in.Location != nil {
-		copy.Location = in.Location
+		updated.Location = in.Location
 	}
 	if in.Notes != nil {
-		copy.Notes = in.Notes
+		updated.Notes = in.Notes
 	}
-	f.updated = &copy
-	return &copy, nil
+	f.updated = &updated
+	return &updated, nil
 }
 
 func (f *appointmentServiceFake) Delete(_ context.Context, _, _ string) error {
@@ -425,7 +425,7 @@ func (f *failingCalendarFake) DeleteEvent(_ context.Context, _, _ string) error 
 func (f *failingCalendarFake) CreateRecurringEvent(_ context.Context, _ string, _ gcalendar.Event, _ int) (string, error) {
 	return "", nil
 }
-func (f *failingCalendarFake) StopRecurringEvent(_ context.Context, _ string, _ string, _ time.Time) error {
+func (f *failingCalendarFake) StopRecurringEvent(_ context.Context, _, _ string, _ time.Time) error {
 	return nil
 }
 
@@ -451,6 +451,6 @@ func (f *failCompensationCalendarFake) DeleteEvent(_ context.Context, _, _ strin
 func (f *failCompensationCalendarFake) CreateRecurringEvent(_ context.Context, _ string, _ gcalendar.Event, _ int) (string, error) {
 	return "", nil
 }
-func (f *failCompensationCalendarFake) StopRecurringEvent(_ context.Context, _ string, _ string, _ time.Time) error {
+func (f *failCompensationCalendarFake) StopRecurringEvent(_ context.Context, _, _ string, _ time.Time) error {
 	return nil
 }

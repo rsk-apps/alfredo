@@ -24,7 +24,7 @@ type AppointmentUseCase struct {
 	timezone     string
 }
 
-func NewAppointmentUseCase(appointments AppointmentServicer, pets PetNameGetter, calendar CalendarPort, telegram TelegramPort, timezone string, logger *zap.Logger) *AppointmentUseCase {
+func NewAppointmentUseCase(appointments AppointmentServicer, pets PetNameGetter, calendar CalendarPort, telegramPort TelegramPort, timezone string, logger *zap.Logger) *AppointmentUseCase {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -32,7 +32,7 @@ func NewAppointmentUseCase(appointments AppointmentServicer, pets PetNameGetter,
 		appointments: appointments,
 		pets:         pets,
 		calendar:     calendar,
-		telegram:     telegram,
+		telegram:     telegramPort,
 		logger:       logger,
 		timezone:     timezone,
 	}

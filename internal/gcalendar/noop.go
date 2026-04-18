@@ -42,7 +42,7 @@ func (a *NoopAdapter) CreateEvent(_ context.Context, calendarID string, event Ev
 	return id, nil
 }
 
-func (a *NoopAdapter) UpdateEvent(_ context.Context, calendarID string, eventID string, event Event) error {
+func (a *NoopAdapter) UpdateEvent(_ context.Context, calendarID, eventID string, event Event) error {
 	a.logger.Info("gcalendar noop update event",
 		zap.String("calendar_id", calendarID),
 		zap.String("event_id", eventID),
@@ -62,7 +62,7 @@ func (a *NoopAdapter) CreateRecurringEvent(_ context.Context, calendarID string,
 	return id, nil
 }
 
-func (a *NoopAdapter) StopRecurringEvent(_ context.Context, calendarID string, eventID string, until time.Time) error {
+func (a *NoopAdapter) StopRecurringEvent(_ context.Context, calendarID, eventID string, until time.Time) error {
 	a.logger.Info("gcalendar noop stop recurring event",
 		zap.String("calendar_id", calendarID),
 		zap.String("event_id", eventID),
@@ -71,7 +71,7 @@ func (a *NoopAdapter) StopRecurringEvent(_ context.Context, calendarID string, e
 	return nil
 }
 
-func (a *NoopAdapter) DeleteEvent(_ context.Context, calendarID string, eventID string) error {
+func (a *NoopAdapter) DeleteEvent(_ context.Context, calendarID, eventID string) error {
 	a.logger.Info("gcalendar noop delete event",
 		zap.String("calendar_id", calendarID),
 		zap.String("event_id", eventID),

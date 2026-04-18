@@ -73,7 +73,7 @@ func (a *Adapter) CreateEvent(ctx context.Context, calendarID string, event Even
 	return inserted.Id, nil
 }
 
-func (a *Adapter) UpdateEvent(ctx context.Context, calendarID string, eventID string, event Event) error {
+func (a *Adapter) UpdateEvent(ctx context.Context, calendarID, eventID string, event Event) error {
 	if calendarID == "" || eventID == "" {
 		return fmt.Errorf("update event: calendar and event ids are required")
 	}
@@ -105,7 +105,7 @@ func (a *Adapter) CreateRecurringEvent(ctx context.Context, calendarID string, e
 	return inserted.Id, nil
 }
 
-func (a *Adapter) StopRecurringEvent(ctx context.Context, calendarID string, eventID string, until time.Time) error {
+func (a *Adapter) StopRecurringEvent(ctx context.Context, calendarID, eventID string, until time.Time) error {
 	if calendarID == "" || eventID == "" {
 		return fmt.Errorf("stop recurring event: calendar and event ids are required")
 	}
@@ -154,7 +154,7 @@ func (a *Adapter) StopRecurringEvent(ctx context.Context, calendarID string, eve
 	return nil
 }
 
-func (a *Adapter) DeleteEvent(ctx context.Context, calendarID string, eventID string) error {
+func (a *Adapter) DeleteEvent(ctx context.Context, calendarID, eventID string) error {
 	if calendarID == "" || eventID == "" {
 		return fmt.Errorf("delete event: calendar and event ids are required")
 	}

@@ -67,16 +67,27 @@ func TestToAnthropicMessagesMapsToolCallsAndResults(t *testing.T) {
 	}
 
 	got := toAnthropicMessages(messages)
+	assertAnthropicMessages(t, got)
+}
+
+func assertAnthropicMessages(t *testing.T, got []anthropic.MessageParam) {
+	t.Helper()
 	if len(got) != 2 {
 		t.Fatalf("messages len = %d, want 2", len(got))
 	}
-	if got[0].Role != anthropic.MessageParamRoleAssistant {
-		t.Fatalf("message 0 role = %q, want assistant", got[0].Role)
+	assertAssistantMessage(t, got[0])
+	assertUserMessage(t, got[1])
+}
+
+func assertAssistantMessage(t *testing.T, msg anthropic.MessageParam) {
+	t.Helper()
+	if msg.Role != anthropic.MessageParamRoleAssistant {
+		t.Fatalf("message role = %q, want assistant", msg.Role)
 	}
-	if len(got[0].Content) != 1 || got[0].Content[0].OfToolUse == nil {
-		t.Fatalf("message 0 content = %#v, want one tool_use block", got[0].Content)
+	if len(msg.Content) != 1 || msg.Content[0].OfToolUse == nil {
+		t.Fatalf("message content = %#v, want one tool_use block", msg.Content)
 	}
-	use := got[0].Content[0].OfToolUse
+	use := msg.Content[0].OfToolUse
 	if use.ID != "call-1" || use.Name != "list_pets" {
 		t.Fatalf("tool use = %#v, want call-1/list_pets", use)
 	}
@@ -84,14 +95,17 @@ func TestToAnthropicMessagesMapsToolCallsAndResults(t *testing.T) {
 	if !ok || args["pet_id"] != "pet-1" {
 		t.Fatalf("tool use input = %#v, want pet_id=pet-1", use.Input)
 	}
+}
 
-	if got[1].Role != anthropic.MessageParamRoleUser {
-		t.Fatalf("message 1 role = %q, want user", got[1].Role)
+func assertUserMessage(t *testing.T, msg anthropic.MessageParam) {
+	t.Helper()
+	if msg.Role != anthropic.MessageParamRoleUser {
+		t.Fatalf("message role = %q, want user", msg.Role)
 	}
-	if len(got[1].Content) != 1 || got[1].Content[0].OfToolResult == nil {
-		t.Fatalf("message 1 content = %#v, want one tool_result block", got[1].Content)
+	if len(msg.Content) != 1 || msg.Content[0].OfToolResult == nil {
+		t.Fatalf("message content = %#v, want one tool_result block", msg.Content)
 	}
-	result := got[1].Content[0].OfToolResult
+	result := msg.Content[0].OfToolResult
 	if result.ToolUseID != "call-1" {
 		t.Fatalf("tool result id = %q, want call-1", result.ToolUseID)
 	}

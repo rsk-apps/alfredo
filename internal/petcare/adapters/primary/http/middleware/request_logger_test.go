@@ -18,7 +18,7 @@ func TestRequestLogger_includesClientIP(t *testing.T) {
 	log := zap.New(core)
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/pets", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/pets", http.NoBody)
 	req.RemoteAddr = "1.2.3.4:5678"
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)

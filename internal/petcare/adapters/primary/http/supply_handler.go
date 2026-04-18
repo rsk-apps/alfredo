@@ -212,7 +212,7 @@ func toSupplyResponse(supply domain.Supply) supplyResponse {
 	}
 }
 
-func parseSupplyDate(c echo.Context, field string, value string) (time.Time, bool) {
+func parseSupplyDate(c echo.Context, field, value string) (time.Time, bool) {
 	parsed, err := time.Parse("2006-01-02", value)
 	if err != nil {
 		_ = validationError(c, field, "must be YYYY-MM-DD format")
@@ -221,7 +221,7 @@ func parseSupplyDate(c echo.Context, field string, value string) (time.Time, boo
 	return parsed, true
 }
 
-func validationError(c echo.Context, field string, issue string) error {
+func validationError(c echo.Context, field, issue string) error {
 	return c.JSON(http.StatusBadRequest, newErrorResponse(
 		"validation_failed",
 		"Request validation failed",
