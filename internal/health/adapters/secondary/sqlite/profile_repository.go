@@ -37,24 +37,17 @@ func (r *ProfileRepository) Get(ctx context.Context) (domain.HealthProfile, erro
 func (r *ProfileRepository) Upsert(ctx context.Context, profile domain.HealthProfile) (domain.HealthProfile, error) {
 	now := time.Now().UTC()
 	profile.ID = 1
-	createdAt := now
-	var createdAtRaw string
-	if err := r.db.QueryRowContext(ctx, `SELECT created_at FROM health_profiles WHERE id = 1`).Scan(&createdAtRaw); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return domain.HealthProfile{}, fmt.Errorf("load existing health profile: %w", err)
-		}
-	} else {
-		existingCreatedAt, err := time.Parse(time.RFC3339Nano, createdAtRaw)
-		if err != nil {
-			return domain.HealthProfile{}, fmt.Errorf("parse created_at %q: %w", createdAtRaw, err)
-		}
-		createdAt = existingCreatedAt
-	}
-	profile.CreatedAt = createdAt
+	profile.CreatedAt = now
 	profile.UpdatedAt = now
-	_, err := r.db.ExecContext(ctx, `
-		INSERT OR REPLACE INTO health_profiles (id, height_cm, birth_date, sex, created_at, updated_at)
+	row := r.db.QueryRowContext(ctx, `
+		INSERT INTO health_profiles (id, height_cm, birth_date, sex, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			height_cm = excluded.height_cm,
+			birth_date = excluded.birth_date,
+			sex = excluded.sex,
+			updated_at = excluded.updated_at
+		RETURNING id, height_cm, birth_date, sex, created_at, updated_at
 	`,
 		profile.ID,
 		profile.HeightCM,
@@ -63,6 +56,10 @@ func (r *ProfileRepository) Upsert(ctx context.Context, profile domain.HealthPro
 		profile.CreatedAt.Format(time.RFC3339Nano),
 		profile.UpdatedAt.Format(time.RFC3339Nano),
 	)
+	profile, err := scanProfile(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.HealthProfile{}, domain.ErrNotFound
+	}
 	if err != nil {
 		return domain.HealthProfile{}, fmt.Errorf("upsert health profile: %w", err)
 	}
