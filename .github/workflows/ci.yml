@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -24,15 +24,65 @@ jobs:
         with:
           version: v2.11.4
 
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Check vulnerabilities
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          make vuln
+
+  unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install coverage tool
+        run: go install github.com/vladopajic/go-test-coverage/v2@latest
+
       - name: Run unit tests
         run: make test
+
+      - name: Check coverage
+        run: make check-coverage
+
+  integration-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
 
       - name: Run integration tests
         run: make integration-test
 
+      - name: Check route coverage
+        run: make check-routes
+
   build:
     runs-on: ubuntu-latest
-    needs: test
+    needs: [lint, vuln, unit-test, integration-test]
     permissions:
       contents: read
       packages: write

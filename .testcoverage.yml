@@ -1,0 +1,16 @@
+profile: coverage.out
+
+threshold:
+  file: 80
+  total: 70
+
+exclude:
+  paths:
+    - .*/domain$
+    - .*/port$
+    - internal/config
+    - internal/logger
+    - internal/httpserver
+    - internal/shared/health
+    - internal/database/migrations/.*
+    - internal/agent/adapters/primary/http$
