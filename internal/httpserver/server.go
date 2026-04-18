@@ -84,9 +84,10 @@ func New(cfg Config) (*echo.Echo, error) {
 	appointmentUC := app.NewAppointmentUseCase(appointmentService, petService, cfg.Calendar, cfg.Telegram, cfg.Location.String(), logger)
 	observationUC := app.NewObservationUseCase(observationService, petService, cfg.Telegram, cfg.Location.String(), logger)
 	supplyUC := app.NewSupplyUseCase(supplyService, petService)
+	summaryUC := app.NewSummaryUseCase(petService, vaccineService, treatmentService, appointmentService, observationService, supplyService, cfg.Location)
 	agentInvocationRepo := agentsqlite.NewInvocationRepository(cfg.DB)
 	agentRouter := agentservice.NewRouter(agentLLM, agentInvocationRepo, cfg.AgentRouterConfig, logger)
-	agentUC := app.NewAgentUseCase(agentRouter, petUC, vaccineUC, treatmentUC, observationUC, appointmentUC, supplyUC, cfg.Location, logger)
+	agentUC := app.NewAgentUseCase(agentRouter, petUC, vaccineUC, treatmentUC, observationUC, appointmentUC, supplyUC, summaryUC, cfg.Telegram, cfg.Location, logger)
 
 	healthAgg := app.NewHealthAggregator(map[string]app.HealthPinger{
 		"sqlite": database.NewChecker(cfg.DB),
@@ -94,6 +95,7 @@ func New(cfg Config) (*echo.Echo, error) {
 
 	healthHandler := pethttp.NewHealthHTTPHandler(healthAgg)
 	petHandler := pethttp.NewPetHandler(petUC)
+	summaryHandler := pethttp.NewSummaryHandler(summaryUC, cfg.Location)
 	vaccineHandler := pethttp.NewVaccineHandler(vaccineUC, cfg.Location)
 	treatmentHandler := pethttp.NewTreatmentHandler(treatmentUC, cfg.Location)
 	appointmentHandler := pethttp.NewAppointmentHandler(appointmentUC, cfg.Location)
@@ -125,6 +127,7 @@ func New(cfg Config) (*echo.Echo, error) {
 
 	protected := e.Group("/api/v1")
 	protected.Use(petmw.APIKeyAuth(cfg.APIKey))
+	summaryHandler.Register(protected)
 	petHandler.Register(protected)
 	vaccineHandler.Register(protected)
 	treatmentHandler.Register(protected)

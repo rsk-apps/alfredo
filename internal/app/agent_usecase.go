@@ -14,6 +14,7 @@ import (
 	agentservice "github.com/rafaelsoares/alfredo/internal/agent/service"
 	"github.com/rafaelsoares/alfredo/internal/petcare/domain"
 	"github.com/rafaelsoares/alfredo/internal/petcare/service"
+	"github.com/rafaelsoares/alfredo/internal/telegram"
 	"github.com/rafaelsoares/alfredo/internal/timeutil"
 )
 
@@ -21,6 +22,7 @@ const agentSystemPrompt = `Você é o Alfredo, assistente pessoal do Rafael para
 Esta é uma interação de uma única resposta: nunca faça perguntas, nunca peça esclarecimentos, nunca proponha próximos passos e nunca tente continuar a conversa.
 Sempre responda em português brasileiro de forma curta, direta e assertiva.
 Use as ferramentas disponíveis para registrar ou consultar informações sobre os pets.
+Quando o Rafael pedir resumo diário, digest, pendências de hoje ou prioridades dos pets, chame get_pet_summary, escreva uma mensagem curta em português com os itens acionáveis e depois chame send_telegram com essa mensagem.
 Para qualquer operação que envolva um pet específico, primeiro chame list_pets para resolver o identificador correto a partir do nome falado pelo Rafael.
 Trate "banho", "banho e tosa", "tosa" e "grooming" como grooming/banho e tosa.
 Se o Rafael perguntar quando foi o banho, quando foi a tosa ou quando foi a última consulta, consulte list_appointments.
@@ -59,6 +61,8 @@ type AgentUseCase struct {
 	observations ObservationServicer
 	appointments AppointmentServicer
 	supplies     SupplyServicer
+	summary      SummaryUseCaser
+	telegram     TelegramPort
 	timezone     *time.Location
 	logger       *zap.Logger
 	tools        []agentdomain.Tool
@@ -72,6 +76,8 @@ func NewAgentUseCase(
 	observations ObservationServicer,
 	appointments AppointmentServicer,
 	supplies SupplyServicer,
+	summary SummaryUseCaser,
+	telegram TelegramPort,
 	timezone *time.Location,
 	logger *zap.Logger,
 ) *AgentUseCase {
@@ -86,6 +92,8 @@ func NewAgentUseCase(
 		observations: observations,
 		appointments: appointments,
 		supplies:     supplies,
+		summary:      summary,
+		telegram:     telegram,
 		timezone:     timezone,
 		logger:       logger,
 		tools:        buildAgentTools(),
@@ -180,6 +188,22 @@ func (uc *AgentUseCase) DispatchToolCall(ctx context.Context, call agentdomain.T
 			return errorToolResult(call, err), err
 		}
 		result = supply
+	case "get_pet_summary":
+		if uc.summary == nil {
+			err := fmt.Errorf("summary use case is not configured")
+			return errorToolResult(call, err), err
+		}
+		summary, err := uc.summary.AllPets(ctx)
+		if err != nil {
+			return errorToolResult(call, err), err
+		}
+		result = summary
+	case "send_telegram":
+		message, err := requireString(call.Arguments, "message")
+		if err != nil {
+			return errorToolResult(call, err), err
+		}
+		result = uc.sendTelegramBestEffort(ctx, message)
 	case "log_observation":
 		in, err := uc.decodeObservation(call.Arguments)
 		if err != nil {
@@ -267,6 +291,18 @@ func (uc *AgentUseCase) DispatchToolCall(ctx context.Context, call agentdomain.T
 		return errorToolResult(call, err), fmt.Errorf("marshal tool result for %q: %w", call.Name, err)
 	}
 	return agentdomain.ToolResult{CallID: call.ID, Content: string(content)}, nil
+}
+
+func (uc *AgentUseCase) sendTelegramBestEffort(ctx context.Context, message string) map[string]string {
+	if uc.telegram == nil {
+		uc.logger.Warn("telegram tool skipped because adapter is not configured")
+		return map[string]string{"status": "erro", "message": "Não consegui enviar a mensagem no Telegram."}
+	}
+	if err := uc.telegram.Send(ctx, telegram.Message{Text: message}); err != nil {
+		uc.logger.Warn("telegram tool send failed", zap.Error(err))
+		return map[string]string{"status": "erro", "message": "Não consegui enviar a mensagem no Telegram."}
+	}
+	return map[string]string{"status": "enviado", "message": "Mensagem enviada no Telegram."}
 }
 
 func (uc *AgentUseCase) decodeObservation(args map[string]any) (service.CreateObservationInput, error) {
@@ -592,6 +628,8 @@ func buildAgentTools() []agentdomain.Tool {
 		tool("list_observations", "List observation history for one pet.", objectSchema(properties("pet_id", "string"), []string{"pet_id"})),
 		tool("list_supplies", "List supply records for one pet.", objectSchema(properties("pet_id", "string"), []string{"pet_id"})),
 		tool("get_supply", "Get one supply record by pet_id and supply_id.", objectSchema(properties("pet_id", "string", "supply_id", "string"), []string{"pet_id", "supply_id"})),
+		tool("get_pet_summary", "Get the all-pets daily digest data with vaccines due soon, active treatments, upcoming appointments, recent observations, and supplies needing reorder. Use this for resumo diário, digest, pendências, or priorities across all pets.", objectSchema(nil, nil)),
+		tool("send_telegram", "Send a plain-text Portuguese Telegram message to Rafael. Use after rendering the daily digest from get_pet_summary.", objectSchema(properties("message", "string"), []string{"message"})),
 		tool("log_observation", "Create a new observation entry for one pet.", objectSchema(properties("pet_id", "string", "observed_at", "string", "description", "string"), []string{"pet_id", "observed_at", "description"})),
 		tool("record_vaccine", "Record a vaccine administration for one pet.", objectSchema(properties("pet_id", "string", "name", "string", "date", "string", "recurrence_days", "integer", "vet_name", "string", "batch_number", "string", "notes", "string"), []string{"pet_id", "name", "date"})),
 		tool("schedule_appointment", "Schedule a pet appointment. Use for vet visits and grooming sessions such as banho, banho e tosa, tosa, or grooming.", objectSchema(map[string]any{

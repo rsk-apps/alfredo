@@ -81,6 +81,10 @@ type CalendarPort = gcalendar.Port
 
 type TelegramPort = telegram.Port
 
+type SummaryUseCaser interface {
+	AllPets(ctx context.Context) (domain.AllPetsSummary, error)
+}
+
 type PetCareTxRunner interface {
 	WithinTx(ctx context.Context, fn func(pets *service.PetService, vaccines *service.VaccineService, treatments *service.TreatmentService, doses *service.DoseService) error) error
 }
