@@ -110,6 +110,23 @@ func TestSummaryUseCaseVaccinesDueSoonUsesDateOnlyDueDateInConfiguredTimezone(t 
 	assertVaccineSummary(t, summaries, "due-today", 0, false)
 }
 
+func TestSuppliesNeedingReorderUsesDateOnlyReorderDateInConfiguredTimezone(t *testing.T) {
+	loc, err := time.LoadLocation("America/Sao_Paulo")
+	if err != nil {
+		t.Fatalf("load location: %v", err)
+	}
+	now := time.Date(2026, 4, 18, 23, 30, 0, 0, loc)
+
+	supplies := suppliesNeedingReorder([]domain.Supply{
+		{ID: "reorder-within-buffer", LastPurchasedAt: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), EstimatedDaysSupply: 24},
+		{ID: "reorder-outside-buffer", LastPurchasedAt: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), EstimatedDaysSupply: 25},
+	}, now, loc)
+
+	if got := supplyIDs(supplies); !sameIDs(got, []string{"reorder-within-buffer"}) {
+		t.Fatalf("supplies needing reorder = %v", got)
+	}
+}
+
 type summaryPetService struct {
 	pets []domain.Pet
 	err  error

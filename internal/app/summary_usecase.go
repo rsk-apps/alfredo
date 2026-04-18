@@ -97,7 +97,7 @@ func (uc *SummaryUseCase) digestForPet(ctx context.Context, pet domain.Pet, now 
 		ActiveTreatments:       activeTreatments(treatments, now),
 		UpcomingAppointments:   upcomingAppointments(appointments, now),
 		RecentObservations:     uc.recentObservations(observations, now),
-		SuppliesNeedingReorder: suppliesNeedingReorder(supplies, now),
+		SuppliesNeedingReorder: suppliesNeedingReorder(supplies, now, uc.timezone),
 	}, nil
 }
 
@@ -163,11 +163,13 @@ func (uc *SummaryUseCase) recentObservations(observations []domain.Observation, 
 	return out
 }
 
-func suppliesNeedingReorder(supplies []domain.Supply, now time.Time) []domain.Supply {
-	cutoff := now.AddDate(0, 0, SupplyReorderBufferDays)
+func suppliesNeedingReorder(supplies []domain.Supply, now time.Time, loc *time.Location) []domain.Supply {
+	today := localDate(now, loc)
+	cutoff := today.AddDate(0, 0, SupplyReorderBufferDays)
 	out := make([]domain.Supply, 0)
 	for _, supply := range supplies {
-		if supply.NextReorderAt().After(cutoff) {
+		reorderDate := dateOnlyInLocation(supply.NextReorderAt(), loc)
+		if reorderDate.After(cutoff) {
 			continue
 		}
 		out = append(out, supply)
