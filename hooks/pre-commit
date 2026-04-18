@@ -1,0 +1,17 @@
+#!/bin/sh
+# Pre-commit quality gate.
+# Install with: make hooks
+set -e
+
+echo "Running pre-commit checks..."
+
+echo "==> Linting (includes security + code smell checks)..."
+golangci-lint run
+
+echo "==> Running tests..."
+go test ./internal/...
+
+echo "==> Building..."
+go build -o /dev/null ./cmd/server
+
+echo "All pre-commit checks passed."
