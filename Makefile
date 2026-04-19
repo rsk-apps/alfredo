@@ -1,7 +1,8 @@
-.PHONY: run build test integration-test integration-tests lint tidy generate stop vuln check-coverage check-routes guard hooks
+.PHONY: run build test integration-test integration-tests lint tidy generate stop vuln coverage-test check-coverage check-routes guard hooks
 
 BINARY  := ./alfredo
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COVERAGE_PKGS := ./internal/...
 LDFLAGS := -ldflags "-X main.version=$(VERSION)"
 
 run: build
@@ -15,7 +16,10 @@ lint:
 	golangci-lint run ./...
 
 test:
-	go test -race -coverprofile=coverage.out ./internal/...
+	go test -race ./internal/...
+
+coverage-test:
+	go test -race -covermode=atomic -coverprofile=coverage.unit.out $(COVERAGE_PKGS)
 
 integration-test:
 	go test -count=1 ./tests/integration/...
@@ -31,7 +35,7 @@ generate:
 vuln:
 	$(HOME)/go/bin/govulncheck ./...
 
-check-coverage:
+check-coverage: coverage-test
 	$(HOME)/go/bin/go-test-coverage --config=.testcoverage.yml
 
 check-routes:

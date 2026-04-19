@@ -85,3 +85,55 @@ func TestInvocationRepositoryCreateAllowsNullErrorMessage(t *testing.T) {
 		t.Fatalf("expected null error_message, got %q", errorMessage.String)
 	}
 }
+
+func TestInvocationRepositoryCreateFillsCreatedAtWhenMissing(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "alfredo.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Fatalf("close db: %v", err)
+		}
+	}()
+
+	if err := NewInvocationRepository(db).Create(context.Background(), domain.Invocation{ID: "inv-zero", Outcome: domain.OutcomeSuccess}); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	var createdAt string
+	if err := db.QueryRow(`SELECT created_at FROM agent_invocations WHERE id = ?`, "inv-zero").Scan(&createdAt); err != nil {
+		t.Fatalf("query invocation: %v", err)
+	}
+	if createdAt == "" {
+		t.Fatal("expected created_at to be populated")
+	}
+}
+
+func TestInvocationRepositoryCreateReturnsMarshalAndInsertErrors(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "alfredo.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Fatalf("close db: %v", err)
+		}
+	}()
+	repo := NewInvocationRepository(db)
+
+	err = repo.Create(context.Background(), domain.Invocation{
+		ID:        "bad-json",
+		ToolCalls: []domain.ToolCall{{Arguments: map[string]any{"bad": func() {}}}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "marshal agent tool calls") {
+		t.Fatalf("marshal error = %v", err)
+	}
+
+	inv := domain.Invocation{ID: "dupe", Outcome: domain.OutcomeSuccess}
+	if err := repo.Create(context.Background(), inv); err != nil {
+		t.Fatalf("first Create returned error: %v", err)
+	}
+	if err := repo.Create(context.Background(), inv); err == nil || !strings.Contains(err.Error(), "insert agent invocation") {
+		t.Fatalf("duplicate insert error = %v", err)
+	}
+}

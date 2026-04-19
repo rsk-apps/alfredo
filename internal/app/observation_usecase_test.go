@@ -17,9 +17,13 @@ import (
 
 type observationServiceFake struct {
 	created       *domain.Observation
+	list          []domain.Observation
+	get           *domain.Observation
 	createCalls   int
 	listCalls     int
 	getCalls      int
+	getPetID      string
+	getID         string
 	createErr     error
 	observedInput service.CreateObservationInput
 }
@@ -43,12 +47,14 @@ func (s *observationServiceFake) Create(_ context.Context, in service.CreateObse
 
 func (s *observationServiceFake) ListByPet(context.Context, string) ([]domain.Observation, error) {
 	s.listCalls++
-	return nil, nil
+	return s.list, nil
 }
 
-func (s *observationServiceFake) GetByID(context.Context, string, string) (*domain.Observation, error) {
+func (s *observationServiceFake) GetByID(_ context.Context, petID, observationID string) (*domain.Observation, error) {
 	s.getCalls++
-	return nil, nil
+	s.getPetID = petID
+	s.getID = observationID
+	return s.get, nil
 }
 
 type petGetterErr struct{ err error }
@@ -137,5 +143,28 @@ func TestObservationUseCaseMissingPetDoesNotCreateOrNotify(t *testing.T) {
 	}
 	if len(telegramRecorder.messages) != 0 {
 		t.Fatalf("telegram messages = %d, want 0", len(telegramRecorder.messages))
+	}
+}
+
+func TestObservationUseCaseDelegatesReadMethods(t *testing.T) {
+	observations := &observationServiceFake{
+		list: []domain.Observation{{ID: "obs-1", PetID: "pet-1", Description: "Vomitou"}},
+		get:  &domain.Observation{ID: "obs-1", PetID: "pet-1", Description: "Vomitou"},
+	}
+	uc := app.NewObservationUseCase(observations, &fakePetGetterWithCalendar{pet: &domain.Pet{ID: "pet-1"}}, &telegramFake{}, "America/Sao_Paulo", zap.NewNop())
+
+	listed, err := uc.ListByPet(context.Background(), "pet-1")
+	if err != nil {
+		t.Fatalf("ListByPet = %v", err)
+	}
+	if len(listed) != 1 || listed[0].ID != "obs-1" || observations.listCalls != 1 {
+		t.Fatalf("listed = %#v listCalls = %d, want obs-1 and one call", listed, observations.listCalls)
+	}
+	got, err := uc.GetByID(context.Background(), "pet-1", "obs-1")
+	if err != nil {
+		t.Fatalf("GetByID = %v", err)
+	}
+	if got.ID != "obs-1" || observations.getPetID != "pet-1" || observations.getID != "obs-1" {
+		t.Fatalf("got = %#v ids = %q/%q, want obs-1 pet-1/obs-1", got, observations.getPetID, observations.getID)
 	}
 }

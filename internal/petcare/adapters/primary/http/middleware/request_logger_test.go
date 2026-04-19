@@ -3,6 +3,7 @@ package middleware_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -43,5 +44,45 @@ func TestRequestLogger_includesClientIP(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("client_ip field missing from log entry; got fields: %+v", entry.Context)
+	}
+}
+
+func TestRequestLoggerLogsErrorResponsesWithDebugPayload(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	log := zap.New(core)
+
+	for _, tc := range []struct {
+		name   string
+		status int
+		method string
+		target string
+		body   string
+	}{
+		{name: "warn", status: http.StatusBadRequest, method: http.MethodPost, target: "/api/v1/pets", body: `{"bad":true}`},
+		{name: "error", status: http.StatusInternalServerError, method: http.MethodGet, target: "/api/v1/pets?limit=1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := echo.New()
+			var body *strings.Reader
+			if tc.body != "" {
+				body = strings.NewReader(tc.body)
+			} else {
+				body = strings.NewReader("")
+			}
+			req := httptest.NewRequest(tc.method, tc.target, body)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			handler := mw.RequestLogger(log)(func(c echo.Context) error {
+				c.Set("log_error", "mapped_error")
+				return c.NoContent(tc.status)
+			})
+			if err := handler(c); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+	if logs.Len() < 2 {
+		t.Fatalf("logs = %d, want at least 2", logs.Len())
 	}
 }

@@ -46,6 +46,26 @@ func TestAdapterSendPostsTelegramForm(t *testing.T) {
 	}
 }
 
+func TestNewAdapterDefaultsAndValidation(t *testing.T) {
+	if _, err := newAdapter(AdapterConfig{}, defaultBaseURL, nil); err == nil {
+		t.Fatal("expected error when credentials are missing")
+	}
+
+	adapter, err := newAdapter(AdapterConfig{BotToken: "secret-token", ChatID: "chat-1"}, "", nil)
+	if err != nil {
+		t.Fatalf("newAdapter returned error: %v", err)
+	}
+	if adapter.baseURL != defaultBaseURL {
+		t.Fatalf("baseURL = %q, want %q", adapter.baseURL, defaultBaseURL)
+	}
+	if adapter.client == nil {
+		t.Fatal("expected default HTTP client")
+	}
+	if adapter.client.Timeout != defaultClientTimeout {
+		t.Fatalf("client timeout = %s, want %s", adapter.client.Timeout, defaultClientTimeout)
+	}
+}
+
 func TestAdapterSendReturnsErrorForTelegramFailures(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -95,6 +115,21 @@ func TestAdapterSendTransportErrorDoesNotLeakToken(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "secret-token") {
 		t.Fatalf("error leaked bot token: %v", err)
+	}
+}
+
+func TestTelegramTextHelpers(t *testing.T) {
+	if got := sanitizeText("  hello  "); got != "hello" {
+		t.Fatalf("sanitizeText = %q, want %q", got, "hello")
+	}
+	if got := sanitizeText("   "); got != "empty response" {
+		t.Fatalf("sanitizeText blank = %q, want empty response", got)
+	}
+	if got := redactToken("token=secret-token", "secret-token"); got != "token=[REDACTED]" {
+		t.Fatalf("redactToken = %q", got)
+	}
+	if got := redactToken("token=secret-token", ""); got != "token=secret-token" {
+		t.Fatalf("redactToken without token = %q", got)
 	}
 }
 

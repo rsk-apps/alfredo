@@ -10,6 +10,8 @@ import (
 	"github.com/rafaelsoares/alfredo/internal/petcare/service"
 )
 
+var errSupplyRepoDown = errors.New("supply repo down")
+
 type mockSupplyRepo struct {
 	supplies []domain.Supply
 	err      error
@@ -160,6 +162,15 @@ func TestSupplyService_GetByIDAndList_ReturnRepositoryValues(t *testing.T) {
 	}
 	if len(listed) != 1 || listed[0].ID != expected.ID {
 		t.Fatalf("listed supplies = %#v, want %q", listed, expected.ID)
+	}
+}
+
+func TestSupplyService_List_WrapsRepositoryErrors(t *testing.T) {
+	svc := service.NewSupplyService(&mockSupplyRepo{err: errSupplyRepoDown})
+
+	_, err := svc.List(context.Background(), "pet-1")
+	if !errors.Is(err, errSupplyRepoDown) {
+		t.Fatalf("List error = %v, want wrapped repository error", err)
 	}
 }
 

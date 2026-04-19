@@ -43,6 +43,27 @@ func TestProfileServiceGetPropagatesNotFound(t *testing.T) {
 	}
 }
 
+func TestProfileServiceGetReturnsRepositoryValue(t *testing.T) {
+	want := domain.HealthProfile{
+		HeightCM:  178,
+		BirthDate: "1993-06-15",
+		Sex:       "male",
+	}
+	svc := NewProfileService(&profileRepoStub{
+		getFn: func(context.Context) (domain.HealthProfile, error) {
+			return want, nil
+		},
+	})
+
+	got, err := svc.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("Get profile = %#v, want %#v", got, want)
+	}
+}
+
 func TestProfileServiceUpsertDelegatesAndWrapsRepositoryErrors(t *testing.T) {
 	want := domain.HealthProfile{
 		HeightCM:  178,

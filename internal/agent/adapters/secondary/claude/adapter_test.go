@@ -1,13 +1,84 @@
 package claude
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
 
 	"github.com/rafaelsoares/alfredo/internal/agent/domain"
 	"github.com/rafaelsoares/alfredo/internal/agent/port"
 )
+
+func TestNewAdapterValidatesConfig(t *testing.T) {
+	if _, err := NewAdapter(Config{}); err == nil {
+		t.Fatal("expected missing api key error")
+	}
+	if _, err := NewAdapter(Config{APIKey: "key"}); err == nil {
+		t.Fatal("expected missing model error")
+	}
+	if _, err := NewAdapter(Config{APIKey: "key", Model: "claude-test"}); err != nil {
+		t.Fatalf("NewAdapter returned error: %v", err)
+	}
+}
+
+func TestCompleteMapsClaudeTextAndToolUse(t *testing.T) {
+	var request map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages" {
+			t.Fatalf("path = %q, want /v1/messages", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"msg-1",
+			"type":"message",
+			"role":"assistant",
+			"model":"claude-test",
+			"content":[
+				{"type":"text","text":"Oi"},
+				{"type":"tool_use","id":"tool-1","name":"list_pets","input":{"pet_id":"pet-1"}}
+			],
+			"stop_reason":"tool_use",
+			"usage":{"input_tokens":7,"output_tokens":3}
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := &Adapter{
+		client: anthropic.NewClient(option.WithAPIKey("key"), option.WithBaseURL(server.URL)),
+		cfg:    Config{APIKey: "key", Model: "claude-test", CallTimeout: time.Second},
+	}
+	out, err := adapter.Complete(context.Background(), port.LLMInput{
+		SystemPrompt:    "system",
+		MaxOutputTokens: 64,
+		Messages:        []port.LLMMessage{{Role: "user", Text: "olá"}},
+		Tools: []domain.Tool{{
+			Name:        "list_pets",
+			Description: "List pets.",
+			InputSchema: map[string]any{"properties": map[string]any{}, "required": []string{}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Complete returned error: %v", err)
+	}
+	if out.FinalText != "Oi" || len(out.ToolCalls) != 1 || out.ToolCalls[0].Name != "list_pets" {
+		t.Fatalf("output = %#v", out)
+	}
+	if out.InputTokens != 7 || out.OutputTokens != 3 {
+		t.Fatalf("usage = %d/%d, want 7/3", out.InputTokens, out.OutputTokens)
+	}
+	if request["model"] != "claude-test" {
+		t.Fatalf("request model = %#v, want claude-test", request["model"])
+	}
+}
 
 func TestToAnthropicToolsForwardsRequiredSchema(t *testing.T) {
 	tools := []domain.Tool{

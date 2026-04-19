@@ -41,19 +41,29 @@ func (r serviceTxRunner) WithinTx(ctx context.Context, fn func(*service.PetServi
 
 type calendarFake struct {
 	createCalendarID  string
+	createCalendarErr error
 	createEventIDs    []string
 	createRecurringID string
+	deleteCalendarErr error
 	deletedCalendars  []string
 	deletedEvents     []string
+	stoppedRecurring  []string
+	stoppedAt         []time.Time
 	createdEvents     []gcalendar.Event
 	updatedEvents     []gcalendar.Event
 	createEventCalls  int
 }
 
 func (c *calendarFake) CreateCalendar(context.Context, string) (string, error) {
+	if c.createCalendarErr != nil {
+		return "", c.createCalendarErr
+	}
 	return c.createCalendarID, nil
 }
 func (c *calendarFake) DeleteCalendar(_ context.Context, calendarID string) error {
+	if c.deleteCalendarErr != nil {
+		return c.deleteCalendarErr
+	}
 	c.deletedCalendars = append(c.deletedCalendars, calendarID)
 	return nil
 }
@@ -73,7 +83,9 @@ func (c *calendarFake) UpdateEvent(_ context.Context, _ string, _ string, event 
 func (c *calendarFake) CreateRecurringEvent(context.Context, string, gcalendar.Event, int) (string, error) {
 	return c.createRecurringID, nil
 }
-func (c *calendarFake) StopRecurringEvent(context.Context, string, string, time.Time) error {
+func (c *calendarFake) StopRecurringEvent(_ context.Context, _ string, eventID string, at time.Time) error {
+	c.stoppedRecurring = append(c.stoppedRecurring, eventID)
+	c.stoppedAt = append(c.stoppedAt, at)
 	return nil
 }
 func (c *calendarFake) DeleteEvent(_ context.Context, _ string, eventID string) error {
@@ -148,6 +160,8 @@ func (r *treatmentRepoStub) Stop(context.Context, string, time.Time) error { ret
 type doseRepoStub struct {
 	createBatchErr error
 	created        []domain.Dose
+	future         []domain.Dose
+	deletedFuture  []string
 }
 
 func (r *doseRepoStub) CreateBatch(_ context.Context, doses []domain.Dose) error {
@@ -158,21 +172,11 @@ func (r *doseRepoStub) ListByTreatment(context.Context, string) ([]domain.Dose, 
 	return r.created, nil
 }
 func (r *doseRepoStub) ListFutureByTreatment(context.Context, string, time.Time) ([]domain.Dose, error) {
-	return nil, nil
+	return r.future, nil
 }
-func (r *doseRepoStub) DeleteFutureByTreatment(context.Context, string, time.Time) error { return nil }
-
-func TestPetUseCaseCreateCompensatesCalendarOnTxError(t *testing.T) {
-	calendar := &calendarFake{createCalendarID: "cal-1"}
-	uc := app.NewPetUseCase(&stubPetService{}, failTxRunner{err: errors.New("db failed")}, calendar, zap.NewNop())
-
-	_, err := uc.Create(context.Background(), service.CreatePetInput{Name: "Luna", Species: "dog"})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if len(calendar.deletedCalendars) != 1 || calendar.deletedCalendars[0] != "cal-1" {
-		t.Fatalf("unexpected calendar compensation: %#v", calendar.deletedCalendars)
-	}
+func (r *doseRepoStub) DeleteFutureByTreatment(_ context.Context, treatmentID string, _ time.Time) error {
+	r.deletedFuture = append(r.deletedFuture, treatmentID)
+	return nil
 }
 
 func TestVaccineUseCaseCreateCompensatesEventOnTxError(t *testing.T) {

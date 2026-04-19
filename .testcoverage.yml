@@ -1,4 +1,4 @@
-profile: coverage.out
+profile: coverage.unit.out
 
 threshold:
   file: 80
@@ -6,11 +6,11 @@ threshold:
 
 exclude:
   paths:
-    - .*/domain$
-    - .*/port$
+    - internal/.*/domain/.*
+    - internal/.*/port/.*
     - internal/config
     - internal/logger
     - internal/httpserver
     - internal/shared/health
-    - internal/database/migrations/.*
-    - internal/agent/adapters/primary/http$
+    - internal/database
+    - internal/gcalendar

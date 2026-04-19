@@ -13,23 +13,40 @@ import (
 // --- mock ---
 
 type mockTreatmentRepo struct {
-	treatment *domain.Treatment
-	err       error
+	treatment  *domain.Treatment
+	treatments []domain.Treatment
+	createErr  error
+	listErr    error
+	getErr     error
+	stopErr    error
+
+	calls      []string
+	stopCalled bool
+	stopAt     time.Time
 }
 
 func (m *mockTreatmentRepo) Create(_ context.Context, t domain.Treatment) (*domain.Treatment, error) {
-	return &t, m.err
+	return &t, m.createErr
 }
 func (m *mockTreatmentRepo) GetByID(_ context.Context, _, _ string) (*domain.Treatment, error) {
-	return m.treatment, m.err
+	m.calls = append(m.calls, "get")
+	return m.treatment, m.getErr
 }
 func (m *mockTreatmentRepo) List(_ context.Context, _ string) ([]domain.Treatment, error) {
-	if m.treatment != nil {
-		return []domain.Treatment{*m.treatment}, m.err
+	if m.treatments != nil {
+		return m.treatments, m.listErr
 	}
-	return nil, m.err
+	if m.treatment != nil {
+		return []domain.Treatment{*m.treatment}, m.listErr
+	}
+	return nil, m.listErr
 }
-func (m *mockTreatmentRepo) Stop(_ context.Context, _ string, _ time.Time) error { return m.err }
+func (m *mockTreatmentRepo) Stop(_ context.Context, _ string, at time.Time) error {
+	m.calls = append(m.calls, "stop")
+	m.stopCalled = true
+	m.stopAt = at
+	return m.stopErr
+}
 
 // --- tests ---
 
@@ -70,9 +87,55 @@ func TestTreatmentService_Create_ValidationErrors(t *testing.T) {
 }
 
 func TestTreatmentService_Stop_NotFound(t *testing.T) {
-	svc := service.NewTreatmentService(&mockTreatmentRepo{err: domain.ErrNotFound})
+	repo := &mockTreatmentRepo{getErr: domain.ErrNotFound}
+	svc := service.NewTreatmentService(repo)
 	err := svc.Stop(context.Background(), "p1", "t1")
 	if !errors.Is(err, domain.ErrNotFound) {
 		t.Errorf("got %v, want ErrNotFound", err)
+	}
+	if len(repo.calls) != 1 || repo.calls[0] != "get" {
+		t.Fatalf("expected lookup before stop, got calls %#v", repo.calls)
+	}
+	if repo.stopCalled {
+		t.Fatal("expected Stop not to reach repository when lookup fails")
+	}
+}
+
+func TestTreatmentService_GetByIDAndList_ReturnRepositoryValues(t *testing.T) {
+	want := &domain.Treatment{ID: "t1", PetID: "p1", Name: "Amoxicillin"}
+	svc := service.NewTreatmentService(&mockTreatmentRepo{treatment: want, treatments: []domain.Treatment{*want}})
+
+	got, err := svc.GetByID(context.Background(), "p1", "t1")
+	if err != nil {
+		t.Fatalf("GetByID error = %v", err)
+	}
+	if got == nil || got.ID != want.ID {
+		t.Fatalf("GetByID = %#v, want %#v", got, want)
+	}
+
+	listed, err := svc.List(context.Background(), "p1")
+	if err != nil {
+		t.Fatalf("List error = %v", err)
+	}
+	if len(listed) != 1 || listed[0].ID != want.ID {
+		t.Fatalf("List = %#v, want %#v", listed, want)
+	}
+}
+
+func TestTreatmentService_Stop_DelegatesToRepository(t *testing.T) {
+	repo := &mockTreatmentRepo{treatment: &domain.Treatment{ID: "t1", PetID: "p1"}}
+	svc := service.NewTreatmentService(repo)
+
+	if err := svc.Stop(context.Background(), "p1", "t1"); err != nil {
+		t.Fatalf("Stop error = %v", err)
+	}
+	if !repo.stopCalled {
+		t.Fatal("expected Stop to call repository")
+	}
+	if repo.stopAt.IsZero() {
+		t.Fatal("expected Stop timestamp to be set")
+	}
+	if len(repo.calls) != 2 || repo.calls[0] != "get" || repo.calls[1] != "stop" {
+		t.Fatalf("expected GetByID before Stop, got calls %#v", repo.calls)
 	}
 }

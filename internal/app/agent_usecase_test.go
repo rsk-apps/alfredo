@@ -37,6 +37,21 @@ func (r *recordingAgentRouter) Execute(
 	return "resposta", agentdomain.Invocation{}, nil
 }
 
+type failingAgentRouter struct {
+	reply string
+	err   error
+}
+
+func (r *failingAgentRouter) Execute(
+	context.Context,
+	string,
+	[]agentdomain.Tool,
+	string,
+	func(context.Context, agentdomain.ToolCall) (agentdomain.ToolResult, error),
+) (string, agentdomain.Invocation, error) {
+	return r.reply, agentdomain.Invocation{}, r.err
+}
+
 func TestAgentUseCaseHandleUsesOneShotPrompt(t *testing.T) {
 	router := &recordingAgentRouter{}
 	uc := NewAgentUseCase(router, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, zap.NewNop())
@@ -75,6 +90,19 @@ func TestAgentUseCaseHandleUsesOneShotPrompt(t *testing.T) {
 	}
 	if strings.Contains(router.systemPrompt, "esclarecimento em vez de chamar uma ferramenta") {
 		t.Fatalf("system prompt still allows clarification questions:\n%s", router.systemPrompt)
+	}
+}
+
+func TestAgentUseCaseHandleReturnsRouterFallbackReply(t *testing.T) {
+	router := &failingAgentRouter{reply: "Não consegui concluir.", err: errors.New("router down")}
+	uc := NewAgentUseCase(router, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, zap.NewNop())
+
+	reply, err := uc.Handle(context.Background(), "resumo dos pets")
+	if err != nil {
+		t.Fatalf("Handle returned error: %v", err)
+	}
+	if reply != "Não consegui concluir." {
+		t.Fatalf("reply = %q, want fallback reply", reply)
 	}
 }
 
@@ -149,6 +177,41 @@ func TestAgentUseCaseSendTelegramIsBestEffort(t *testing.T) {
 	if !strings.Contains(result.Content, "Não consegui enviar") {
 		t.Fatalf("send_telegram result content = %q", result.Content)
 	}
+}
+
+func TestAgentUseCaseSendTelegramReportsSuccessAndMissingAdapter(t *testing.T) {
+	success := &recordingTelegram{}
+	uc := NewAgentUseCase(nil, nil, nil, nil, nil, nil, nil, nil, success, time.UTC, nil)
+
+	result, err := uc.DispatchToolCall(context.Background(), agentdomain.ToolCall{
+		ID:        "call-1",
+		Name:      "send_telegram",
+		Arguments: map[string]any{"message": "Resumo dos pets"},
+	})
+	if err != nil {
+		t.Fatalf("DispatchToolCall returned error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("send_telegram returned error tool result: %#v", result)
+	}
+	assertJSONContains(t, result.Content, "enviado")
+	if len(success.messages) != 1 || success.messages[0].Text != "Resumo dos pets" {
+		t.Fatalf("telegram messages = %#v, want one sent message", success.messages)
+	}
+
+	withoutTelegram := NewAgentUseCase(nil, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, zap.NewNop())
+	result, err = withoutTelegram.DispatchToolCall(context.Background(), agentdomain.ToolCall{
+		ID:        "call-2",
+		Name:      "send_telegram",
+		Arguments: map[string]any{"message": "Resumo dos pets"},
+	})
+	if err != nil {
+		t.Fatalf("DispatchToolCall returned error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("send_telegram returned error tool result for missing adapter: %#v", result)
+	}
+	assertJSONContains(t, result.Content, "Não consegui enviar")
 }
 
 func TestAgentPromptAndToolsMetadataSentinelsForRepresentativeUtterances(t *testing.T) {
@@ -621,6 +684,95 @@ func TestAgentUseCaseDispatchToolErrors(t *testing.T) {
 	}
 }
 
+func TestAgentUseCaseDispatchRejectsInvalidToolArguments(t *testing.T) {
+	loc := mustLocation(t, "America/Sao_Paulo")
+
+	tests := []struct {
+		name        string
+		call        agentdomain.ToolCall
+		wantMessage string
+	}{
+		{
+			name:        "blank required string",
+			call:        toolCall("get_pet", map[string]any{"pet_id": "  "}),
+			wantMessage: "pet_id is required",
+		},
+		{
+			name:        "non string required argument",
+			call:        toolCall("get_pet", map[string]any{"pet_id": 123}),
+			wantMessage: "pet_id must be a string",
+		},
+		{
+			name: "invalid treatment amount",
+			call: toolCall("start_treatment", map[string]any{
+				"pet_id":         "pet-1",
+				"name":           "Antibiotico",
+				"dosage_amount":  true,
+				"dosage_unit":    "ml",
+				"route":          "oral",
+				"interval_hours": 12,
+				"started_at":     "2026-04-17T08:00:00",
+			}),
+			wantMessage: "dosage_amount must be a number",
+		},
+		{
+			name: "invalid treatment interval",
+			call: toolCall("start_treatment", map[string]any{
+				"pet_id":         "pet-1",
+				"name":           "Antibiotico",
+				"dosage_amount":  2.5,
+				"dosage_unit":    "ml",
+				"route":          "oral",
+				"interval_hours": "doze",
+				"started_at":     "2026-04-17T08:00:00",
+			}),
+			wantMessage: "interval_hours must be an integer",
+		},
+		{
+			name: "invalid treatment end time",
+			call: toolCall("start_treatment", map[string]any{
+				"pet_id":         "pet-1",
+				"name":           "Antibiotico",
+				"dosage_amount":  2.5,
+				"dosage_unit":    "ml",
+				"route":          "oral",
+				"interval_hours": 12,
+				"started_at":     "2026-04-17T08:00:00",
+				"ended_at":       "amanha",
+			}),
+			wantMessage: "ended_at",
+		},
+		{
+			name: "invalid vaccine recurrence",
+			call: toolCall("record_vaccine", map[string]any{
+				"pet_id":          "pet-1",
+				"name":            "V10",
+				"date":            "2026-04-17T10:00:00",
+				"recurrence_days": true,
+			}),
+			wantMessage: "recurrence_days must be an integer",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			deps := newAgentTestDeps()
+			uc := deps.useCase(loc)
+
+			result, err := uc.DispatchToolCall(context.Background(), tc.call)
+			if err == nil {
+				t.Fatal("DispatchToolCall returned nil error")
+			}
+			if !result.IsError {
+				t.Fatalf("tool result IsError = false, result = %#v", result)
+			}
+			if !strings.Contains(result.Content, tc.wantMessage) {
+				t.Fatalf("error content = %q, want substring %q", result.Content, tc.wantMessage)
+			}
+		})
+	}
+}
+
 func toolByName(t *testing.T, tools []agentdomain.Tool, name string) agentdomain.Tool {
 	t.Helper()
 	for _, tool := range tools {
@@ -714,6 +866,15 @@ type failingTelegram struct {
 
 func (t failingTelegram) Send(context.Context, telegram.Message) error {
 	return t.err
+}
+
+type recordingTelegram struct {
+	messages []telegram.Message
+}
+
+func (t *recordingTelegram) Send(_ context.Context, msg telegram.Message) error {
+	t.messages = append(t.messages, msg)
+	return nil
 }
 
 type agentPetFake struct {
