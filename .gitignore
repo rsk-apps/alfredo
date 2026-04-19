@@ -26,8 +26,8 @@ swift/CalendarHelper/.build/
 .claude/
 .superpowers/
 .worktrees/
-
 .agents
+harness
 
 # Runtime artifacts
 calendar.pid
