@@ -2,9 +2,11 @@ package sqlite
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/rafaelsoares/alfredo/internal/database"
 	"github.com/rafaelsoares/alfredo/internal/health/domain"
 )
 
@@ -130,6 +132,81 @@ func TestWorkoutRepositoryBulkUpsertPreservesCreatedAt(t *testing.T) {
 	}
 	if newUpdatedAt <= originalCreatedAt {
 		t.Fatalf("updated_at %q should be after original created_at %q", newUpdatedAt, originalCreatedAt)
+	}
+}
+
+func TestWorkoutRepositoryBulkUpsertEmptySlice(t *testing.T) {
+	db := openHealthTestDB(t)
+	repo := NewWorkoutRepository(db)
+
+	count, err := repo.BulkUpsert(context.Background(), []domain.WorkoutSession{})
+	if err != nil {
+		t.Fatalf("BulkUpsert empty: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("count = %d, want 0 for empty slice", count)
+	}
+}
+
+func TestWorkoutRepositoryBulkUpsertClosedDBReturnsError(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "closed.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close db: %v", err)
+	}
+
+	repo := NewWorkoutRepository(db)
+	_, err = repo.BulkUpsert(context.Background(), []domain.WorkoutSession{
+		{ActivityType: "Running", StartDate: time.Now(), EndDate: time.Now().Add(30 * time.Minute), DurationSeconds: 1800, Source: "Apple Watch"},
+	})
+	if err == nil {
+		t.Fatal("want error from closed db, got nil")
+	}
+}
+
+func TestWorkoutRepositoryListClosedDBReturnsError(t *testing.T) {
+	db, err := database.Open(filepath.Join(t.TempDir(), "closed2.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close db: %v", err)
+	}
+
+	repo := NewWorkoutRepository(db)
+	_, err = repo.List(context.Background(),
+		time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 4, 30, 23, 59, 59, 0, time.UTC),
+	)
+	if err == nil {
+		t.Fatal("want error from closed db, got nil")
+	}
+}
+
+func TestWorkoutRepositoryListBadStartDateReturnsError(t *testing.T) {
+	db := openHealthTestDB(t)
+	repo := NewWorkoutRepository(db)
+	ctx := context.Background()
+
+	// Insert a row with an invalid start_date that will be returned by the range query
+	// but fail time.Parse(RFC3339Nano, ...) — use a value that sorts between the query bounds
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO health_workout_sessions
+		(activity_type, start_date, end_date, duration_seconds, source, created_at, updated_at)
+		VALUES ('Test', '2026-04-18T15:00:00.bad', '2026-04-18T15:30:00Z', 1800, 'test', '2026-04-18T10:00:00Z', '2026-04-18T10:00:00Z')
+	`)
+	if err != nil {
+		t.Fatalf("raw insert: %v", err)
+	}
+
+	_, err = repo.List(ctx,
+		time.Date(2026, 4, 18, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 4, 18, 23, 59, 59, 0, time.UTC),
+	)
+	if err == nil {
+		t.Fatal("want parse error for invalid start_date, got nil")
 	}
 }
 
