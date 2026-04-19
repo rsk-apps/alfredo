@@ -107,6 +107,13 @@ func TestAgentUseCaseHandleReturnsRouterFallbackReply(t *testing.T) {
 	}
 }
 
+func TestAgentUseCaseNilLoggerDefault(t *testing.T) {
+	uc := NewAgentUseCase(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, nil)
+	if uc == nil {
+		t.Fatal("expected non-nil use case")
+	}
+}
+
 func TestAgentSystemPromptHealthDisambiguation(t *testing.T) {
 	required := []string{
 		"SAÚDE PESSOAL",
@@ -766,6 +773,207 @@ func TestAgentUseCaseDispatchToolErrors(t *testing.T) {
 			name:        "get_health_metrics invalid from date",
 			call:        toolCall("get_health_metrics", map[string]any{"metric_type": "weight", "from": "not-a-date"}),
 			wantMessage: "from must be a date",
+		},
+		{
+			name:        "get_health_metrics invalid to date",
+			call:        toolCall("get_health_metrics", map[string]any{"metric_type": "weight", "to": "not-a-date"}),
+			wantMessage: "to must be a date",
+		},
+		{
+			name: "get_health_metrics downstream error",
+			call: toolCall("get_health_metrics", map[string]any{"metric_type": "weight"}),
+			config: func(d *agentTestDeps) {
+				d.healthMetrics.err = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name:        "list_workouts invalid from date",
+			call:        toolCall("list_workouts", map[string]any{"from": "not-a-date"}),
+			wantMessage: "from must be a date",
+		},
+		{
+			name:        "list_workouts invalid to date",
+			call:        toolCall("list_workouts", map[string]any{"to": "not-a-date"}),
+			wantMessage: "to must be a date",
+		},
+		{
+			name: "list_workouts downstream error",
+			call: toolCall("list_workouts", nil),
+			config: func(d *agentTestDeps) {
+				d.healthWorkouts.err = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name: "get_pet downstream error",
+			call: toolCall("get_pet", map[string]any{"pet_id": "pet-1"}),
+			config: func(d *agentTestDeps) {
+				d.pets.getErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name:        "list_vaccines missing pet_id",
+			call:        toolCall("list_vaccines", map[string]any{}),
+			wantMessage: "pet_id is required",
+		},
+		{
+			name: "list_vaccines downstream error",
+			call: toolCall("list_vaccines", map[string]any{"pet_id": "pet-1"}),
+			config: func(d *agentTestDeps) {
+				d.vaccines.listErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name:        "list_treatments missing pet_id",
+			call:        toolCall("list_treatments", map[string]any{}),
+			wantMessage: "pet_id is required",
+		},
+		{
+			name: "list_treatments downstream error",
+			call: toolCall("list_treatments", map[string]any{"pet_id": "pet-1"}),
+			config: func(d *agentTestDeps) {
+				d.treatments.listErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name:        "list_appointments missing pet_id",
+			call:        toolCall("list_appointments", map[string]any{}),
+			wantMessage: "pet_id is required",
+		},
+		{
+			name: "list_appointments downstream error",
+			call: toolCall("list_appointments", map[string]any{"pet_id": "pet-1"}),
+			config: func(d *agentTestDeps) {
+				d.appointments.listErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name:        "list_observations missing pet_id",
+			call:        toolCall("list_observations", map[string]any{}),
+			wantMessage: "pet_id is required",
+		},
+		{
+			name: "list_observations downstream error",
+			call: toolCall("list_observations", map[string]any{"pet_id": "pet-1"}),
+			config: func(d *agentTestDeps) {
+				d.observations.listErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name:        "list_supplies missing pet_id",
+			call:        toolCall("list_supplies", map[string]any{}),
+			wantMessage: "pet_id is required",
+		},
+		{
+			name: "list_supplies downstream error",
+			call: toolCall("list_supplies", map[string]any{"pet_id": "pet-1"}),
+			config: func(d *agentTestDeps) {
+				d.supplies.listErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name:        "get_supply missing supply_id",
+			call:        toolCall("get_supply", map[string]any{"pet_id": "pet-1"}),
+			wantMessage: "supply_id is required",
+		},
+		{
+			name: "get_supply downstream error",
+			call: toolCall("get_supply", map[string]any{"pet_id": "pet-1", "supply_id": "supply-1"}),
+			config: func(d *agentTestDeps) {
+				d.supplies.getErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name: "get_pet_summary downstream error",
+			call: toolCall("get_pet_summary", nil),
+			config: func(d *agentTestDeps) {
+				d.summary.err = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name:        "send_telegram missing message",
+			call:        toolCall("send_telegram", map[string]any{}),
+			wantMessage: "message is required",
+		},
+		{
+			name: "log_observation downstream error",
+			call: toolCall("log_observation", map[string]any{"pet_id": "pet-1", "observed_at": "2026-04-17T09:00:00", "description": "Vomitou"}),
+			config: func(d *agentTestDeps) {
+				d.observations.createErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name: "record_vaccine downstream error",
+			call: toolCall("record_vaccine", map[string]any{"pet_id": "pet-1", "name": "V10", "date": "2026-04-17T10:00:00"}),
+			config: func(d *agentTestDeps) {
+				d.vaccines.recordErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name: "schedule_appointment downstream error",
+			call: toolCall("schedule_appointment", map[string]any{"pet_id": "pet-1", "type": "vet", "scheduled_at": "2026-04-18T11:00:00"}),
+			config: func(d *agentTestDeps) {
+				d.appointments.createErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name: "start_treatment downstream error",
+			call: toolCall("start_treatment", map[string]any{"pet_id": "pet-1", "name": "Antibiotico", "dosage_amount": 2.5, "dosage_unit": "ml", "route": "oral", "interval_hours": 12, "started_at": "2026-04-17T08:00:00"}),
+			config: func(d *agentTestDeps) {
+				d.treatments.createErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name:        "reschedule_appointment missing appointment_id",
+			call:        toolCall("reschedule_appointment", map[string]any{"pet_id": "pet-1"}),
+			wantMessage: "appointment_id is required",
+		},
+		{
+			name:        "reschedule_appointment invalid scheduled_at",
+			call:        toolCall("reschedule_appointment", map[string]any{"pet_id": "pet-1", "appointment_id": "appt-1", "scheduled_at": "amanha"}),
+			wantMessage: "scheduled_at",
+		},
+		{
+			name: "reschedule_appointment downstream error",
+			call: toolCall("reschedule_appointment", map[string]any{"pet_id": "pet-1", "appointment_id": "appt-1", "scheduled_at": "2026-04-18T11:00:00"}),
+			config: func(d *agentTestDeps) {
+				d.appointments.updateErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name: "create_supply downstream error",
+			call: toolCall("create_supply", map[string]any{"pet_id": "pet-1", "name": "Racao", "last_purchased_at": "2026-04-01", "estimated_days_supply": 30}),
+			config: func(d *agentTestDeps) {
+				d.supplies.createErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
+		},
+		{
+			name:        "update_supply missing supply_id",
+			call:        toolCall("update_supply", map[string]any{"pet_id": "pet-1"}),
+			wantMessage: "supply_id is required",
+		},
+		{
+			name: "update_supply downstream error",
+			call: toolCall("update_supply", map[string]any{"pet_id": "pet-1", "supply_id": "supply-1"}),
+			config: func(d *agentTestDeps) {
+				d.supplies.updateErr = downstreamErr
+			},
+			wantMessage: downstreamErr.Error(),
 		},
 	}
 
