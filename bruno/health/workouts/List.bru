@@ -1,0 +1,15 @@
+meta {
+  name: List Workouts
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/health/workouts?from=2026-04-01&to=2026-04-30
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}

@@ -1,0 +1,60 @@
+meta {
+  name: Import Workouts
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/health/workouts/import
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+body:json {
+  {
+    "workoutCount": 2,
+    "workouts": [
+      {
+        "activityName": "Running",
+        "startDate": "2026-04-18T10:00:00Z",
+        "endDate": "2026-04-18T10:30:00Z",
+        "duration": 1800,
+        "events": [],
+        "statistics": {
+          "HKQuantityTypeIdentifierActiveEnergyBurned": {
+            "value": 250.5
+          },
+          "HKQuantityTypeIdentifierDistanceWalkingRunning": {
+            "value": 5000
+          },
+          "HKQuantityTypeIdentifierHeartRate": {
+            "average": 160,
+            "minimum": 140,
+            "maximum": 180
+          }
+        }
+      },
+      {
+        "activityName": "Cycling",
+        "startDate": "2026-04-19T14:00:00Z",
+        "endDate": "2026-04-19T15:00:00Z",
+        "duration": 3600,
+        "events": [],
+        "statistics": {
+          "HKQuantityTypeIdentifierActiveEnergyBurned": {
+            "value": 400
+          },
+          "HKQuantityTypeIdentifierHeartRate": {
+            "average": 140,
+            "minimum": 120,
+            "maximum": 165
+          }
+        }
+      }
+    ]
+  }
+}

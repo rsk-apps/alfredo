@@ -73,6 +73,9 @@ func New(cfg Config) (*echo.Echo, error) {
 	appointmentRepo := petcaresqlite.NewAppointmentRepository(cfg.DB)
 	supplyRepo := petcaresqlite.NewSupplyRepository(cfg.DB)
 	healthRepo := healthsql.NewProfileRepository(cfg.DB)
+	metricRepo := healthsql.NewMetricRepository(cfg.DB)
+	workoutRepo := healthsql.NewWorkoutRepository(cfg.DB)
+	rawImportRepo := healthsql.NewRawImportRepository(cfg.DB)
 
 	petService := petsvc.NewPetService(petRepo)
 	vaccineService := petsvc.NewVaccineService(vaccineRepo, petRepo)
@@ -82,6 +85,8 @@ func New(cfg Config) (*echo.Echo, error) {
 	observationService := petsvc.NewObservationService(observationRepo)
 	supplyService := petsvc.NewSupplyService(supplyRepo)
 	healthProfileService := healthsvc.NewProfileService(healthRepo)
+	metricService := healthsvc.NewMetricService(metricRepo, rawImportRepo)
+	workoutService := healthsvc.NewWorkoutService(workoutRepo, rawImportRepo)
 
 	petUC := app.NewPetUseCase(petService, txRunner, cfg.Calendar, logger)
 	vaccineUC := app.NewVaccineUseCase(vaccineService, petService, txRunner, cfg.Calendar, cfg.Telegram, cfg.Location.String(), logger)
@@ -100,6 +105,8 @@ func New(cfg Config) (*echo.Echo, error) {
 
 	healthHandler := pethttp.NewHealthHTTPHandler(healthAgg)
 	healthProfileHandler := healthhttp.NewProfileHandler(healthProfileService)
+	metricHandler := healthhttp.NewMetricHandler(metricService)
+	workoutHandler := healthhttp.NewWorkoutHandler(workoutService)
 	petHandler := pethttp.NewPetHandler(petUC)
 	summaryHandler := pethttp.NewSummaryHandler(summaryUC, cfg.Location)
 	vaccineHandler := pethttp.NewVaccineHandler(vaccineUC, cfg.Location)
@@ -134,6 +141,8 @@ func New(cfg Config) (*echo.Echo, error) {
 	protected := e.Group("/api/v1")
 	protected.Use(petmw.APIKeyAuth(cfg.APIKey))
 	healthProfileHandler.Register(protected)
+	metricHandler.Register(protected)
+	workoutHandler.Register(protected)
 	summaryHandler.Register(protected)
 	petHandler.Register(protected)
 	vaccineHandler.Register(protected)

@@ -1,0 +1,15 @@
+meta {
+  name: List Health Metrics
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/health/metrics?type=weight&from=2026-04-01&to=2026-04-30
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}

@@ -1,0 +1,53 @@
+meta {
+  name: Import Health Metrics
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/health/metrics/import
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+body:json {
+  {
+    "weight": [
+      {
+        "date": "2026-04-18",
+        "value": 80.5,
+        "unit": "kg"
+      },
+      {
+        "date": "2026-04-19",
+        "value": 80.6,
+        "unit": "kg"
+      }
+    ],
+    "restingHeartRate": [
+      {
+        "date": "2026-04-18",
+        "value": 65,
+        "unit": "bpm"
+      }
+    ],
+    "sleepTime": [
+      {
+        "date": "2026-04-18",
+        "value": 420,
+        "unit": "minutes",
+        "stages": {
+          "awake": 30.5,
+          "core": 120.0,
+          "deep": 60.5,
+          "rem": 180.0,
+          "unspecified": 29.0
+        }
+      }
+    ]
+  }
+}

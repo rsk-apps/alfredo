@@ -46,6 +46,15 @@ var migration011 string
 //go:embed migrations/health/012_health_profiles.sql
 var migration012 string
 
+//go:embed migrations/health/013_health_raw_imports.sql
+var migration013 string
+
+//go:embed migrations/health/014_health_daily_metrics.sql
+var migration014 string
+
+//go:embed migrations/health/015_health_workout_sessions.sql
+var migration015 string
+
 func Open(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -90,6 +99,9 @@ func migrate(db *sql.DB) error {
 		{"010_supplies", migration010},
 		{"011_agent_invocations", migration011},
 		{"012_health_profiles", migration012},
+		{"013_health_raw_imports", migration013},
+		{"014_health_daily_metrics", migration014},
+		{"015_health_workout_sessions", migration015},
 	}
 
 	for _, m := range migrations {
