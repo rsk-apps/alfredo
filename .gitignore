@@ -22,12 +22,12 @@ swift/CalendarHelper/.build/
 .idea/
 .vscode/
 
-# Claude / Superpowers
+# Agents
 .claude/
 .superpowers/
 .worktrees/
 .agents
-harness
+harness/
 
 # Runtime artifacts
 calendar.pid

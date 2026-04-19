@@ -97,7 +97,7 @@ func New(cfg Config) (*echo.Echo, error) {
 	summaryUC := app.NewSummaryUseCase(petService, vaccineService, treatmentService, appointmentService, observationService, supplyService, cfg.Location)
 	agentInvocationRepo := agentsqlite.NewInvocationRepository(cfg.DB)
 	agentRouter := agentservice.NewRouter(agentLLM, agentInvocationRepo, cfg.AgentRouterConfig, logger)
-	agentUC := app.NewAgentUseCase(agentRouter, petUC, vaccineUC, treatmentUC, observationUC, appointmentUC, supplyUC, summaryUC, cfg.Telegram, cfg.Location, logger)
+	agentUC := app.NewAgentUseCase(agentRouter, petUC, vaccineUC, treatmentUC, observationUC, appointmentUC, supplyUC, summaryUC, cfg.Telegram, healthProfileService, metricService, workoutService, cfg.Location, logger)
 
 	healthAgg := app.NewHealthAggregator(map[string]app.HealthPinger{
 		"sqlite": database.NewChecker(cfg.DB),

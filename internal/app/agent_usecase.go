@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,22 +13,27 @@ import (
 
 	agentdomain "github.com/rafaelsoares/alfredo/internal/agent/domain"
 	agentservice "github.com/rafaelsoares/alfredo/internal/agent/service"
+	healthdomain "github.com/rafaelsoares/alfredo/internal/health/domain"
 	"github.com/rafaelsoares/alfredo/internal/petcare/domain"
 	"github.com/rafaelsoares/alfredo/internal/petcare/service"
 	"github.com/rafaelsoares/alfredo/internal/telegram"
 	"github.com/rafaelsoares/alfredo/internal/timeutil"
 )
 
-const agentSystemPrompt = `Você é o Alfredo, assistente pessoal do Rafael para cuidados com os pets dele.
+const agentSystemPrompt = `Você é o Alfredo, assistente pessoal do Rafael para cuidados com os pets dele e para monitoramento da sua saúde pessoal.
 Esta é uma interação de uma única resposta: nunca faça perguntas, nunca peça esclarecimentos, nunca proponha próximos passos e nunca tente continuar a conversa.
 Sempre responda em português brasileiro de forma curta, direta e assertiva.
-Use as ferramentas disponíveis para registrar ou consultar informações sobre os pets.
-Quando o Rafael pedir resumo diário, digest, pendências de hoje ou prioridades dos pets, chame get_pet_summary, escreva uma mensagem curta em português com os itens acionáveis e depois chame send_telegram com essa mensagem.
+
+PETS: Use as ferramentas de pets para registrar ou consultar informações sobre animais de estimação.
 Para qualquer operação que envolva um pet específico, primeiro chame list_pets para resolver o identificador correto a partir do nome falado pelo Rafael.
 Trate "banho", "banho e tosa", "tosa" e "grooming" como grooming/banho e tosa.
 Se o Rafael perguntar quando foi o banho, quando foi a tosa ou quando foi a última consulta, consulte list_appointments.
 Se o Rafael quiser marcar banho e tosa ou agendar grooming, use schedule_appointment com type=grooming.
 Se o Rafael disser para registrar ou anotar uma observação, use log_observation.
+Quando o Rafael pedir resumo diário, digest, pendências de hoje ou prioridades dos pets, chame get_pet_summary, escreva uma mensagem curta em português com os itens acionáveis e depois chame send_telegram com essa mensagem.
+
+SAÚDE PESSOAL: Use as ferramentas de saúde (get_health_profile, get_health_metrics, list_workouts) para consultas pontuais sobre o próprio Rafael — peso, treinos, frequência cardíaca, sono, passos, VO2Max e outras métricas pessoais. Nunca use ferramentas de saúde para pets. Para pedidos de análises cruzadas ou tendências entre múltiplas métricas, responda que esse recurso ainda não está disponível.
+
 Nunca invente identificadores.
 Se o pedido do Rafael estiver ambíguo ou faltar informação essencial, responda apenas que não conseguiu concluir o pedido.`
 
@@ -53,19 +59,34 @@ type AgentVaccineUseCaser interface {
 	RecordVaccine(ctx context.Context, in service.RecordVaccineInput) (*domain.Vaccine, error)
 }
 
+type HealthProfileQuerier interface {
+	Get(ctx context.Context) (healthdomain.HealthProfile, error)
+}
+
+type HealthMetricsQuerier interface {
+	List(ctx context.Context, metricType string, from, to time.Time) ([]healthdomain.DailyMetric, error)
+}
+
+type HealthWorkoutsQuerier interface {
+	List(ctx context.Context, from, to time.Time) ([]healthdomain.WorkoutSession, error)
+}
+
 type AgentUseCase struct {
-	router       AgentRouter
-	pets         PetCareServicer
-	vaccines     AgentVaccineUseCaser
-	treatments   AgentTreatmentUseCaser
-	observations ObservationServicer
-	appointments AppointmentServicer
-	supplies     SupplyServicer
-	summary      SummaryUseCaser
-	telegram     TelegramPort
-	timezone     *time.Location
-	logger       *zap.Logger
-	tools        []agentdomain.Tool
+	router         AgentRouter
+	pets           PetCareServicer
+	vaccines       AgentVaccineUseCaser
+	treatments     AgentTreatmentUseCaser
+	observations   ObservationServicer
+	appointments   AppointmentServicer
+	supplies       SupplyServicer
+	summary        SummaryUseCaser
+	telegram       TelegramPort
+	healthProfile  HealthProfileQuerier
+	healthMetrics  HealthMetricsQuerier
+	healthWorkouts HealthWorkoutsQuerier
+	timezone       *time.Location
+	logger         *zap.Logger
+	tools          []agentdomain.Tool
 }
 
 func NewAgentUseCase(
@@ -78,6 +99,9 @@ func NewAgentUseCase(
 	supplies SupplyServicer,
 	summary SummaryUseCaser,
 	telegram TelegramPort,
+	healthProfile HealthProfileQuerier,
+	healthMetrics HealthMetricsQuerier,
+	healthWorkouts HealthWorkoutsQuerier,
 	timezone *time.Location,
 	logger *zap.Logger,
 ) *AgentUseCase {
@@ -85,18 +109,21 @@ func NewAgentUseCase(
 		logger = zap.NewNop()
 	}
 	return &AgentUseCase{
-		router:       router,
-		pets:         pets,
-		vaccines:     vaccines,
-		treatments:   treatments,
-		observations: observations,
-		appointments: appointments,
-		supplies:     supplies,
-		summary:      summary,
-		telegram:     telegram,
-		timezone:     timezone,
-		logger:       logger,
-		tools:        buildAgentTools(),
+		router:         router,
+		pets:           pets,
+		vaccines:       vaccines,
+		treatments:     treatments,
+		observations:   observations,
+		appointments:   appointments,
+		supplies:       supplies,
+		summary:        summary,
+		telegram:       telegram,
+		healthProfile:  healthProfile,
+		healthMetrics:  healthMetrics,
+		healthWorkouts: healthWorkouts,
+		timezone:       timezone,
+		logger:         logger,
+		tools:          buildAgentTools(),
 	}
 }
 
@@ -282,6 +309,47 @@ func (uc *AgentUseCase) DispatchToolCall(ctx context.Context, call agentdomain.T
 			return errorToolResult(call, err), err
 		}
 		result = supply
+	case "get_health_profile":
+		profile, err := uc.healthProfile.Get(ctx)
+		if err != nil {
+			if errors.Is(err, healthdomain.ErrNotFound) {
+				err = fmt.Errorf("nenhum perfil de saúde cadastrado")
+			}
+			return errorToolResult(call, err), err
+		}
+		result = profile
+	case "get_health_metrics":
+		metricType, err := requireString(call.Arguments, "metric_type")
+		if err != nil {
+			return errorToolResult(call, err), err
+		}
+		from, err := optionalDate(call.Arguments, "from")
+		if err != nil {
+			return errorToolResult(call, err), err
+		}
+		to, err := optionalDate(call.Arguments, "to")
+		if err != nil {
+			return errorToolResult(call, err), err
+		}
+		metrics, err := uc.healthMetrics.List(ctx, metricType, from, to)
+		if err != nil {
+			return errorToolResult(call, err), err
+		}
+		result = metrics
+	case "list_workouts":
+		from, err := optionalDate(call.Arguments, "from")
+		if err != nil {
+			return errorToolResult(call, err), err
+		}
+		to, err := optionalDate(call.Arguments, "to")
+		if err != nil {
+			return errorToolResult(call, err), err
+		}
+		workouts, err := uc.healthWorkouts.List(ctx, from, to)
+		if err != nil {
+			return errorToolResult(call, err), err
+		}
+		result = workouts
 	default:
 		err := fmt.Errorf("unknown tool %q", call.Name)
 		return errorToolResult(call, err), err
@@ -614,6 +682,23 @@ func parseDate(text, key string) (time.Time, error) {
 	return t, nil
 }
 
+// optionalDate parses a YYYY-MM-DD date from args[key]. Returns zero time when key is absent or empty.
+func optionalDate(args map[string]any, key string) (time.Time, error) {
+	v, ok := args[key]
+	if !ok || v == nil {
+		return time.Time{}, nil
+	}
+	s, ok := v.(string)
+	if !ok {
+		s = fmt.Sprint(v)
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, nil
+	}
+	return parseDate(s, key)
+}
+
 func errorToolResult(call agentdomain.ToolCall, err error) agentdomain.ToolResult {
 	return agentdomain.ToolResult{CallID: call.ID, Content: err.Error(), IsError: true}
 }
@@ -647,6 +732,9 @@ func buildAgentTools() []agentdomain.Tool {
 		tool("reschedule_appointment", "Move an existing appointment to a new time.", objectSchema(properties("pet_id", "string", "appointment_id", "string", "scheduled_at", "string"), []string{"pet_id", "appointment_id", "scheduled_at"})),
 		tool("create_supply", "Create a supply record for one pet.", objectSchema(properties("pet_id", "string", "name", "string", "last_purchased_at", "string", "estimated_days_supply", "integer", "notes", "string"), []string{"pet_id", "name", "last_purchased_at", "estimated_days_supply"})),
 		tool("update_supply", "Update a supply record for one pet.", objectSchema(properties("pet_id", "string", "supply_id", "string", "name", "string", "last_purchased_at", "string", "estimated_days_supply", "integer", "notes", "string"), []string{"pet_id", "supply_id"})),
+		tool("get_health_profile", "Get Rafael's personal health profile (height, birth date, sex). Use ONLY for data about Rafael himself — not for any pet.", objectSchema(nil, nil)),
+		tool("get_health_metrics", "Query Rafael's personal daily health metrics by metric type (e.g. weight, bodyFat, restingHeartRate, stepCount, sleepTime, walkingDistance, vo2Max). Optional from and to dates in YYYY-MM-DD format narrow the result. Use ONLY for data about Rafael himself — not for any pet.", objectSchema(properties("metric_type", "string", "from", "string", "to", "string"), []string{"metric_type"})),
+		tool("list_workouts", "List Rafael's workout sessions from Apple Watch (activity type, duration, calories burned, heart rate). Optional from and to dates in YYYY-MM-DD format narrow the result. Use ONLY for Rafael's own workouts — not for pet activities.", objectSchema(properties("from", "string", "to", "string"), nil)),
 	}
 }
 
