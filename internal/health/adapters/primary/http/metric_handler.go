@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -34,14 +35,14 @@ type metricImportResponse struct {
 }
 
 type dailyMetricResponse struct {
-	ID          int              `json:"id"`
-	Date        string           `json:"date"`
-	MetricType  string           `json:"metric_type"`
-	Value       float64          `json:"value"`
-	Unit        string           `json:"unit"`
+	ID          int                 `json:"id"`
+	Date        string              `json:"date"`
+	MetricType  string              `json:"metric_type"`
+	Value       float64             `json:"value"`
+	Unit        string              `json:"unit"`
 	SleepStages *domain.SleepStages `json:"sleep_stages,omitempty"`
-	CreatedAt   string           `json:"created_at"`
-	UpdatedAt   string           `json:"updated_at"`
+	CreatedAt   string              `json:"created_at"`
+	UpdatedAt   string              `json:"updated_at"`
 }
 
 // Health Exporter format: {metricType: [{date, value, unit, stages}, ...], ...}.
@@ -58,19 +59,26 @@ func (h *MetricHandler) ImportMetrics(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 	}
 
-	// Parse Health Exporter JSON: map of metric arrays
-	var payload map[string][]healthExporterMetric
+	// Parse Health Exporter JSON: map of metric arrays plus metadata objects such as exportInfo.
+	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid JSON format"})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("invalid JSON format: %v", err)})
 	}
 
 	var metrics []domain.DailyMetric
 	importedAt := time.Now().UTC()
 
 	// Iterate all top-level keys except "exportInfo"
-	for metricType, entries := range payload {
+	for metricType, rawEntries := range payload {
 		if metricType == "exportInfo" {
 			continue
+		}
+
+		var entries []healthExporterMetric
+		if err := json.Unmarshal(rawEntries, &entries); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"error": fmt.Sprintf("invalid metric section %q: expected an array of metric entries: %v", metricType, err),
+			})
 		}
 
 		for _, entry := range entries {

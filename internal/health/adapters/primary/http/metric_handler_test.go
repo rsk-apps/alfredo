@@ -93,7 +93,7 @@ func TestMetricHandlerImportSkipsExportInfo(t *testing.T) {
 	}
 
 	rec := doMetricRequest(t, http.MethodPost, "/api/v1/health/metrics/import",
-		`{"weight":[{"date":"2026-04-18","value":80.5,"unit":"kg"}],"exportInfo":[{"date":"2026-04-18","value":1,"unit":""}]}`, stub)
+		`{"weight":[{"date":"2026-04-18","value":80.5,"unit":"kg"}],"exportInfo":{"appVersion":"1.3.1","exportDate":"2026-04-20T15:24:15Z","dataTypes":["weight"]}}`, stub)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -133,6 +133,21 @@ func TestMetricHandlerImportRejectsInvalidJSON(t *testing.T) {
 	rec := doMetricRequest(t, http.MethodPost, "/api/v1/health/metrics/import", "not-json", &metricUseCaseStub{})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 for invalid JSON", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "invalid JSON format") {
+		t.Fatalf("body = %s, want explicit JSON format error", rec.Body.String())
+	}
+}
+
+func TestMetricHandlerImportRejectsMetricSectionThatIsNotArray(t *testing.T) {
+	rec := doMetricRequest(t, http.MethodPost, "/api/v1/health/metrics/import",
+		`{"weight":{"date":"2026-04-18","value":80.5,"unit":"kg"}}`, &metricUseCaseStub{})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for invalid metric section", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `invalid metric section \"weight\"`) || !strings.Contains(body, "expected an array") {
+		t.Fatalf("body = %s, want explicit metric section error", body)
 	}
 }
 
