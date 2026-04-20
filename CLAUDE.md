@@ -35,16 +35,51 @@ internal/
 - **Handler interfaces unchanged**: HTTP handlers define narrow interfaces. Use Cases implement the same interfaces, so handlers don't change — only the injected dependency changes (service → use case for mutations).
 - **Domain isolation**: petcare domain must not import from app/; app/ imports and orchestrates services. This enforces unidirectional dependency.
 
-## Tech Lead Gate
+## Harness Workflow
 
-Alfredo has two advisor skills that govern how work flows from idea to merge:
+Alfredo uses a four-role harness for all development work. The authoritative rules live in `harness/`. CLAUDE.md summarizes the trigger conditions — when in doubt, the harness wins.
 
-- **`/pm` (Jinx)** — product authority. Sole writer of `docs/stories/`, `docs/VISION.md`, and `docs/pm/MEMORY.md`.
-- **`/tl` (Vex)** — tech lead authority. Sole writer of `docs/tl/` and of the `## Tech Lead Review` section on story files.
+### Roles and skills
 
-**No story in `docs/stories/backlog/` enters execution until it has a `## Tech Lead Review` section with `Verdict: APPROVED`.** Before any executing agent begins work on a story, it must read the story file and check that section. If it is missing or the verdict is `CHANGES REQUESTED` / `REJECTED`, the agent stops and invokes `/tl` in Mode A (Story Review). Vex walks `docs/tl/checklists/STORY_REVIEW_DOD.md` out loud, then appends the review block using `docs/tl/templates/STORY_REVIEW_BLOCK.md` and updates the story's `tech_lead_review:` frontmatter field.
+| Skill | Persona | Owns | Key paths |
+|---|---|---|---|
+| `/pm` | — | Stories, Vision, Product Decisions | `docs/stories/`, `docs/product/VISION.md`, `docs/product/decisions/` |
+| `/tl` | — | Technical Strategies, ADRs, Tech Lead Reviews | `docs/tech/strategies/`, `docs/tech/adr/` |
+| `/executor` | — | Implementation, Execution Handoff | `docs/state/handoffs/` |
+| `/verifier` | — | Execution Review | `docs/reviews/execution/` |
 
-Vex also serves as an on-demand advisor. Agents and the user can invoke `/tl` mid-work for architecture review, Go-idiom review, test-quality review, or security review. Vex's memory lives at `docs/tl/MEMORY.md` (index) and `docs/tl/adr/ADR-*.md` (full ADRs). Both are append-only; supersede prior entries by adding new ones, never by editing.
+### Story lifecycle
+
+Stories move through these states (see `harness/policies/STORY_STATE_MACHINE.md` for full rules):
+
+```
+backlog → strategy_pending → in_progress → validation_pending → done
+                                                              ↘ in_progress (if changes_requested)
+```
+
+Use `scripts/move-story-state STORY-XXX <state>` to advance a story — it checks preconditions before moving.
+
+### Automatic trigger rules
+
+**Before starting any story work:**
+1. Read the story file and check its `status` frontmatter field.
+2. If `status` is not `in_progress`, do not execute. Check what is blocking:
+   - Missing Technical Strategy or Tech Lead Review → invoke `/tl`
+   - Missing or unclear acceptance criteria → invoke `/pm`
+3. Run `scripts/validate-artifacts <story-file>` — if it exits non-zero, surface the failures and stop.
+4. Verify the story passes `harness/validation/DOR_STORY.md` before the first line of code.
+
+**During implementation:**
+- Invoke `/executor` skill. Follow the approved Technical Strategy in `docs/tech/strategies/`.
+- If the strategy is ambiguous or missing, stop and invoke `/tl` — do not improvise.
+- Write an Execution Handoff to `docs/state/handoffs/` when handing off or pausing.
+
+**After implementation:**
+- Invoke `/verifier` skill to produce an Execution Review at `docs/reviews/execution/`.
+- Verifier sets story status: `approved` → `done`, `changes_requested` → back to `in_progress`.
+
+**On-demand `/tl`:**
+The `/tl` skill also serves as an on-demand advisor for architecture review, Go-idiom review, test-quality review, or security review at any point. TL memory lives at `docs/tl/MEMORY.md`.
 
 ## Routes
 

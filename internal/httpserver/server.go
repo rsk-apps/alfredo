@@ -88,6 +88,7 @@ func New(cfg Config) (*echo.Echo, error) {
 	healthProfileService := healthsvc.NewProfileService(healthRepo)
 	metricService := healthsvc.NewMetricService(metricRepo, rawImportRepo)
 	workoutService := healthsvc.NewWorkoutService(workoutRepo, rawImportRepo)
+	insightService := healthsvc.NewInsightService()
 
 	petUC := app.NewPetUseCase(petService, txRunner, cfg.Calendar, logger)
 	vaccineUC := app.NewVaccineUseCase(vaccineService, petService, txRunner, cfg.Calendar, cfg.Telegram, cfg.Location.String(), logger)
@@ -96,9 +97,10 @@ func New(cfg Config) (*echo.Echo, error) {
 	observationUC := app.NewObservationUseCase(observationService, petService, cfg.Telegram, cfg.Location.String(), logger)
 	supplyUC := app.NewSupplyUseCase(supplyService, petService)
 	summaryUC := app.NewSummaryUseCase(petService, vaccineService, treatmentService, appointmentService, observationService, supplyService, cfg.Location)
+	healthDigestUC := app.NewHealthDigestUseCase(healthProfileService, metricService, workoutService, insightService, cfg.Telegram, cfg.Location, logger)
 	agentInvocationRepo := agentsqlite.NewInvocationRepository(cfg.DB)
 	agentRouter := agentservice.NewRouter(agentLLM, agentInvocationRepo, cfg.AgentRouterConfig, logger)
-	agentUC := app.NewAgentUseCase(agentRouter, petUC, vaccineUC, treatmentUC, observationUC, appointmentUC, supplyUC, summaryUC, cfg.Telegram, healthProfileService, metricService, workoutService, cfg.Location, logger)
+	agentUC := app.NewAgentUseCase(agentRouter, petUC, vaccineUC, treatmentUC, observationUC, appointmentUC, supplyUC, summaryUC, cfg.Telegram, healthProfileService, metricService, workoutService, healthDigestUC, cfg.Location, logger)
 
 	healthAgg := app.NewHealthAggregatorWithVersion(map[string]app.HealthPinger{
 		"sqlite": database.NewChecker(cfg.DB),
@@ -108,6 +110,7 @@ func New(cfg Config) (*echo.Echo, error) {
 	healthProfileHandler := healthhttp.NewProfileHandler(healthProfileService)
 	metricHandler := healthhttp.NewMetricHandler(metricService)
 	workoutHandler := healthhttp.NewWorkoutHandler(workoutService)
+	digestHandler := healthhttp.NewDigestHandler(healthDigestUC)
 	petHandler := pethttp.NewPetHandler(petUC)
 	summaryHandler := pethttp.NewSummaryHandler(summaryUC, cfg.Location)
 	vaccineHandler := pethttp.NewVaccineHandler(vaccineUC, cfg.Location)
@@ -144,6 +147,7 @@ func New(cfg Config) (*echo.Echo, error) {
 	healthProfileHandler.Register(protected)
 	metricHandler.Register(protected)
 	workoutHandler.Register(protected)
+	digestHandler.Register(protected)
 	summaryHandler.Register(protected)
 	petHandler.Register(protected)
 	vaccineHandler.Register(protected)

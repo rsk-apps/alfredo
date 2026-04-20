@@ -1,0 +1,21 @@
+meta {
+  name: Send Health Digest
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/health/digest
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}
+
+body:json {
+  {
+    "days": 14
+  }
+}

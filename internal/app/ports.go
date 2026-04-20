@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/rafaelsoares/alfredo/internal/gcalendar"
+	healthdomain "github.com/rafaelsoares/alfredo/internal/health/domain"
 	"github.com/rafaelsoares/alfredo/internal/petcare/domain"
 	"github.com/rafaelsoares/alfredo/internal/petcare/service"
 	"github.com/rafaelsoares/alfredo/internal/shared/health"
@@ -96,4 +97,8 @@ type AppointmentServicer interface {
 	List(ctx context.Context, petID string) ([]domain.Appointment, error)
 	Update(ctx context.Context, petID, appointmentID string, in service.UpdateAppointmentInput) (*domain.Appointment, error)
 	Delete(ctx context.Context, petID, appointmentID string) error
+}
+
+type HealthInsightComputer interface {
+	Compute(ctx context.Context, days int) (healthdomain.HealthInsight, error)
 }
