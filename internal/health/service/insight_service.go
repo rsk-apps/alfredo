@@ -28,14 +28,19 @@ func (s *InsightService) Compute(
 	workouts []healthdomain.WorkoutSession,
 	days int,
 ) healthdomain.HealthInsight {
+	weightMetrics := s.sortedMetricsByDate(metricsByType["weight"])
+	restingHRMetrics := s.sortedMetricsByDate(metricsByType["restingHeartRate"])
+	sleepMetrics := s.sortedMetricsByDate(metricsByType["sleepTime"])
+	vo2MaxMetrics := s.sortedMetricsByDate(metricsByType["vo2Max"])
+
 	insight := healthdomain.HealthInsight{
 		WindowDays: days,
-		Weight:     s.computeWeightInsight(metricsByType["weight"]),
-		BMI:        s.computeBMIInsight(profile, metricsByType["weight"]),
-		RestingHR:  s.computeRestingHRInsight(metricsByType["restingHeartRate"]),
-		Sleep:      s.computeSleepInsight(metricsByType["sleepTime"]),
+		Weight:     s.computeWeightInsight(weightMetrics),
+		BMI:        s.computeBMIInsight(profile, weightMetrics),
+		RestingHR:  s.computeRestingHRInsight(restingHRMetrics),
+		Sleep:      s.computeSleepInsight(sleepMetrics),
 		Workouts:   s.computeWorkoutInsight(workouts, days),
-		VO2Max:     s.computeVO2MaxInsight(profile, metricsByType["vo2Max"]),
+		VO2Max:     s.computeVO2MaxInsight(profile, vo2MaxMetrics),
 	}
 	insight.Flags = s.computeFlags(insight, profile)
 	return insight
@@ -193,6 +198,17 @@ func (s *InsightService) average(metrics []healthdomain.DailyMetric) float64 {
 	return sum / float64(len(metrics))
 }
 
+func (s *InsightService) sortedMetricsByDate(metrics []healthdomain.DailyMetric) []healthdomain.DailyMetric {
+	if len(metrics) < 2 {
+		return metrics
+	}
+	sorted := append([]healthdomain.DailyMetric(nil), metrics...)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Date < sorted[j].Date
+	})
+	return sorted
+}
+
 func (s *InsightService) groupSleepByDate(metrics []healthdomain.DailyMetric) map[string]float64 {
 	sleepByDate := make(map[string]float64)
 	for _, m := range metrics {
@@ -213,8 +229,17 @@ func (s *InsightService) maxConsecutiveBelowThreshold(sleepByDate map[string]flo
 
 	maxConsecutive := 0
 	currentConsecutive := 0
+	var previousDate time.Time
 
 	for _, date := range dates {
+		currentDate, err := time.Parse("2006-01-02", date)
+		if err != nil {
+			currentConsecutive = 0
+			continue
+		}
+		if !previousDate.IsZero() && currentDate.Sub(previousDate) != 24*time.Hour {
+			currentConsecutive = 0
+		}
 		if sleepByDate[date] < sleepThresholdHours {
 			currentConsecutive++
 			if currentConsecutive > maxConsecutive {
@@ -223,6 +248,7 @@ func (s *InsightService) maxConsecutiveBelowThreshold(sleepByDate map[string]flo
 		} else {
 			currentConsecutive = 0
 		}
+		previousDate = currentDate
 	}
 	return maxConsecutive
 }
@@ -242,24 +268,7 @@ func (s *InsightService) ageFromBirthDate(birthDateStr string) int {
 }
 
 func (s *InsightService) vo2MaxCategory(vo2 float64, age int, sex string) string {
-	categories := map[string][][2]float64{
-		"M": {
-			{0, 15.2},
-			{15.3, 24.9},
-			{25.0, 35.0},
-			{35.1, 40.0},
-			{40.1, 51.4},
-			{51.5, 100},
-		},
-		"F": {
-			{0, 12.2},
-			{12.3, 21.0},
-			{21.1, 32.2},
-			{32.3, 36.4},
-			{36.5, 42.4},
-			{42.5, 100},
-		},
-	}
+	categories := s.vo2MaxRangesForAge(age)
 	categoryNames := []string{"muito baixo", "baixo", "abaixo da média", "na média", "acima da média", "excelente"}
 
 	ageGroupKey := sex
@@ -280,4 +289,34 @@ func (s *InsightService) vo2MaxCategory(vo2 float64, age int, sex string) string
 		}
 	}
 	return "desconhecido"
+}
+
+func (s *InsightService) vo2MaxRangesForAge(age int) map[string][][2]float64 {
+	switch {
+	case age < 30:
+		return map[string][][2]float64{
+			"M": {{0, 24.9}, {25.0, 33.9}, {34.0, 42.4}, {42.5, 46.4}, {46.5, 52.4}, {52.5, 100}},
+			"F": {{0, 23.5}, {23.6, 28.9}, {29.0, 32.9}, {33.0, 36.9}, {37.0, 41.0}, {41.1, 100}},
+		}
+	case age < 40:
+		return map[string][][2]float64{
+			"M": {{0, 22.9}, {23.0, 30.9}, {31.0, 38.4}, {38.5, 44.0}, {44.1, 49.4}, {49.5, 100}},
+			"F": {{0, 20.9}, {21.0, 26.9}, {27.0, 31.4}, {31.5, 35.6}, {35.7, 40.0}, {40.1, 100}},
+		}
+	case age < 50:
+		return map[string][][2]float64{
+			"M": {{0, 19.9}, {20.0, 26.9}, {27.0, 35.9}, {36.0, 41.0}, {41.1, 45.9}, {46.0, 100}},
+			"F": {{0, 19.4}, {19.5, 24.4}, {24.5, 30.2}, {30.3, 33.9}, {34.0, 38.9}, {39.0, 100}},
+		}
+	case age < 60:
+		return map[string][][2]float64{
+			"M": {{0, 17.9}, {18.0, 24.9}, {25.0, 33.4}, {33.5, 39.2}, {39.3, 43.0}, {43.1, 100}},
+			"F": {{0, 17.9}, {18.0, 22.7}, {22.8, 27.2}, {27.3, 31.4}, {31.5, 35.7}, {35.8, 100}},
+		}
+	default:
+		return map[string][][2]float64{
+			"M": {{0, 15.9}, {16.0, 21.9}, {22.0, 30.4}, {30.5, 35.2}, {35.3, 39.9}, {40.0, 100}},
+			"F": {{0, 16.9}, {17.0, 21.4}, {21.5, 24.9}, {25.0, 30.2}, {30.3, 31.4}, {31.5, 100}},
+		}
+	}
 }

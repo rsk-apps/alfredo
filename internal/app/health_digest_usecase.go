@@ -77,7 +77,8 @@ func (uc *HealthDigestUseCase) Compute(ctx context.Context, days int) (healthdom
 	}
 
 	priorFrom := from.AddDate(0, 0, -days)
-	priorWindow, err := uc.workouts.List(ctx, priorFrom, from)
+	priorTo := from.Add(-time.Nanosecond)
+	priorWindow, err := uc.workouts.List(ctx, priorFrom, priorTo)
 	if err != nil {
 		return healthdomain.HealthInsight{}, fmt.Errorf("fetch workouts prior window: %w", err)
 	}

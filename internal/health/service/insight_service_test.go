@@ -72,9 +72,10 @@ func TestComputeBMI(t *testing.T) {
 	t.Run("with profile and weight", func(t *testing.T) {
 		profile := &healthdomain.HealthProfile{HeightCM: 180}
 		metrics := []healthdomain.DailyMetric{
-			{Date: "2026-01-01", MetricType: "weight", Value: 75.0},
+			{Date: "2026-01-02", MetricType: "weight", Value: 75.0},
+			{Date: "2026-01-01", MetricType: "weight", Value: 74.0},
 		}
-		insight := svc.computeBMIInsight(profile, metrics)
+		insight := svc.Compute(profile, map[string][]healthdomain.DailyMetric{"weight": metrics}, nil, 14).BMI
 		if !insight.HasData {
 			t.Fatal("expected HasData=true")
 		}
@@ -123,6 +124,24 @@ func TestComputeRestingHRTrend(t *testing.T) {
 		}
 	})
 
+	t.Run("descending input still computes chronologically", func(t *testing.T) {
+		metrics := []healthdomain.DailyMetric{
+			{Date: "2026-01-05", MetricType: "restingHeartRate", Value: 68},
+			{Date: "2026-01-04", MetricType: "restingHeartRate", Value: 67},
+			{Date: "2026-01-03", MetricType: "restingHeartRate", Value: 65},
+			{Date: "2026-01-02", MetricType: "restingHeartRate", Value: 61},
+			{Date: "2026-01-01", MetricType: "restingHeartRate", Value: 60},
+		}
+		insight := svc.Compute(nil, map[string][]healthdomain.DailyMetric{"restingHeartRate": metrics}, nil, 14).RestingHR
+		if insight.Trend != healthdomain.TrendUp {
+			t.Errorf("expected TrendUp for descending input, got %v", insight.Trend)
+		}
+		expected := (65.0 + 67.0 + 68.0) / 3.0
+		if insight.AverageBPM < expected-0.001 || insight.AverageBPM > expected+0.001 {
+			t.Errorf("expected later-window average %.3f, got %v", expected, insight.AverageBPM)
+		}
+	})
+
 	t.Run("insufficient data", func(t *testing.T) {
 		metrics := []healthdomain.DailyMetric{
 			{Date: "2026-01-01", MetricType: "restingHeartRate", Value: 60},
@@ -161,6 +180,18 @@ func TestComputeSleepInsight(t *testing.T) {
 			t.Fatal("expected HasData=false for nil metrics")
 		}
 	})
+
+	t.Run("gaps break the consecutive streak", func(t *testing.T) {
+		metrics := []healthdomain.DailyMetric{
+			{Date: "2026-01-01", MetricType: "sleepTime", Value: 5.5},
+			{Date: "2026-01-03", MetricType: "sleepTime", Value: 5.0},
+			{Date: "2026-01-05", MetricType: "sleepTime", Value: 5.2},
+		}
+		insight := svc.computeSleepInsight(metrics)
+		if insight.ConsecutiveBelowThreshold != 1 {
+			t.Errorf("expected gaps to reset streak, got %d", insight.ConsecutiveBelowThreshold)
+		}
+	})
 }
 
 func TestComputeVO2MaxCategory(t *testing.T) {
@@ -169,24 +200,33 @@ func TestComputeVO2MaxCategory(t *testing.T) {
 	tests := []struct {
 		name     string
 		vo2      float64
+		age      int
 		sex      string
 		expected string
 	}{
-		{"male very low", 10.0, "M", "muito baixo"},
-		{"male low", 20.0, "M", "baixo"},
-		{"male excelente", 55.0, "M", "excelente"},
-		{"female very low", 10.0, "F", "muito baixo"},
-		{"female excelente", 45.0, "F", "excelente"},
+		{"male very low", 10.0, 30, "M", "muito baixo"},
+		{"male low", 28.0, 30, "M", "baixo"},
+		{"male excelente", 55.0, 30, "M", "excelente"},
+		{"female very low", 10.0, 30, "F", "muito baixo"},
+		{"female excelente", 45.0, 30, "F", "excelente"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			category := svc.vo2MaxCategory(tt.vo2, 30, tt.sex)
+			category := svc.vo2MaxCategory(tt.vo2, tt.age, tt.sex)
 			if category != tt.expected {
 				t.Errorf("expected %s, got %s", tt.expected, category)
 			}
 		})
 	}
+
+	t.Run("age affects the norm category", func(t *testing.T) {
+		younger := svc.vo2MaxCategory(41.0, 25, "M")
+		older := svc.vo2MaxCategory(41.0, 60, "M")
+		if younger == older {
+			t.Fatalf("expected age-specific categories, got %q for both", younger)
+		}
+	})
 }
 
 func TestComputeFlags(t *testing.T) {
@@ -242,9 +282,9 @@ func TestComputeFlags(t *testing.T) {
 
 	t.Run("no flags when all normal", func(t *testing.T) {
 		insight := healthdomain.HealthInsight{
-			Weight:   healthdomain.WeightInsight{HasData: true, DeltaKg: 0.5},
+			Weight:    healthdomain.WeightInsight{HasData: true, DeltaKg: 0.5},
 			RestingHR: healthdomain.RestingHRInsight{HasData: true, Trend: healthdomain.TrendStable},
-			Sleep:    healthdomain.SleepInsight{HasData: true, ConsecutiveBelowThreshold: 1},
+			Sleep:     healthdomain.SleepInsight{HasData: true, ConsecutiveBelowThreshold: 1},
 		}
 		flags := svc.computeFlags(insight, nil)
 		if len(flags) > 0 {
@@ -313,5 +353,36 @@ func TestComputeFullInsight(t *testing.T) {
 	}
 	if !insight.VO2Max.HasData {
 		t.Fatal("expected VO2Max data")
+	}
+}
+
+func TestComputeFullInsightSortsDescendingMetricSlices(t *testing.T) {
+	svc := NewInsightService()
+
+	profile := &healthdomain.HealthProfile{
+		HeightCM:  180,
+		BirthDate: "1990-01-01",
+		Sex:       "M",
+	}
+
+	metricsByType := map[string][]healthdomain.DailyMetric{
+		"weight": {
+			{Date: "2026-04-03", MetricType: "weight", Value: 76.0},
+			{Date: "2026-04-02", MetricType: "weight", Value: 75.2},
+			{Date: "2026-04-01", MetricType: "weight", Value: 75.0},
+		},
+	}
+
+	insight := svc.Compute(profile, metricsByType, nil, 14)
+
+	if insight.Weight.Trend != healthdomain.TrendUp {
+		t.Fatalf("expected upward trend after sorting descending input, got %v", insight.Weight.Trend)
+	}
+	if insight.Weight.DeltaKg != 1.0 {
+		t.Fatalf("expected delta of 1.0kg, got %v", insight.Weight.DeltaKg)
+	}
+	expectedBMI := 76.0 / (1.8 * 1.8)
+	if insight.BMI.Value < expectedBMI-0.01 || insight.BMI.Value > expectedBMI+0.01 {
+		t.Fatalf("expected BMI to use latest weight %.2f, got %.2f", expectedBMI, insight.BMI.Value)
 	}
 }

@@ -43,6 +43,7 @@ func (m *mockHealthMetricsQuerier) List(ctx context.Context, metricType string, 
 
 type mockHealthWorkoutsQuerier struct {
 	workouts []healthdomain.WorkoutSession
+	queries  []workoutQuery
 	err      error
 }
 
@@ -50,7 +51,13 @@ func (m *mockHealthWorkoutsQuerier) List(ctx context.Context, from, to time.Time
 	if m.err != nil {
 		return nil, m.err
 	}
+	m.queries = append(m.queries, workoutQuery{from: from, to: to})
 	return m.workouts, nil
+}
+
+type workoutQuery struct {
+	from time.Time
+	to   time.Time
 }
 
 type recordingTelegramPort struct {
@@ -254,13 +261,32 @@ func TestHealthDigestUseCaseComputeWithWorkoutData(t *testing.T) {
 	}
 }
 
+func TestHealthDigestUseCaseComputeDoesNotOverlapWorkoutWindows(t *testing.T) {
+	profileQuerier := &mockHealthProfileQuerier{err: healthdomain.ErrNotFound}
+	metricsQuerier := &mockHealthMetricsQuerier{metrics: map[string][]healthdomain.DailyMetric{}}
+	workoutsQuerier := &mockHealthWorkoutsQuerier{}
+
+	uc := NewHealthDigestUseCase(profileQuerier, metricsQuerier, workoutsQuerier, healthservice.NewInsightService(), nil, time.UTC, zap.NewNop())
+
+	if _, err := uc.Compute(context.Background(), 14); err != nil {
+		t.Fatalf("Compute failed: %v", err)
+	}
+
+	if len(workoutsQuerier.queries) != 2 {
+		t.Fatalf("expected 2 workout queries, got %d", len(workoutsQuerier.queries))
+	}
+	if !workoutsQuerier.queries[0].from.After(workoutsQuerier.queries[1].to) {
+		t.Fatalf("expected non-overlapping workout windows, got current from=%s prior to=%s", workoutsQuerier.queries[0].from, workoutsQuerier.queries[1].to)
+	}
+}
+
 func TestHealthDigestUseCaseTelegramMessageFormatting(t *testing.T) {
 	profile := &healthdomain.HealthProfile{HeightCM: 180, BirthDate: "1990-01-01", Sex: "M"}
 	metrics := map[string][]healthdomain.DailyMetric{
-		"weight": {{Date: "2026-04-01", MetricType: "weight", Value: 75.0}, {Date: "2026-04-02", MetricType: "weight", Value: 76.0}},
+		"weight":           {{Date: "2026-04-01", MetricType: "weight", Value: 75.0}, {Date: "2026-04-02", MetricType: "weight", Value: 76.0}},
 		"restingHeartRate": {{Date: "2026-04-01", MetricType: "restingHeartRate", Value: 60}, {Date: "2026-04-02", MetricType: "restingHeartRate", Value: 65}, {Date: "2026-04-03", MetricType: "restingHeartRate", Value: 70}},
-		"sleepTime": {{Date: "2026-04-01", MetricType: "sleepTime", Value: 5.0}, {Date: "2026-04-02", MetricType: "sleepTime", Value: 5.5}, {Date: "2026-04-03", MetricType: "sleepTime", Value: 6.0}},
-		"vo2Max": {{Date: "2026-04-03", MetricType: "vo2Max", Value: 45.0}},
+		"sleepTime":        {{Date: "2026-04-01", MetricType: "sleepTime", Value: 5.0}, {Date: "2026-04-02", MetricType: "sleepTime", Value: 5.5}, {Date: "2026-04-03", MetricType: "sleepTime", Value: 6.0}},
+		"vo2Max":           {{Date: "2026-04-03", MetricType: "vo2Max", Value: 45.0}},
 	}
 	telegram := &recordingTelegramPort{}
 
