@@ -7,6 +7,7 @@ import (
 
 	"github.com/rafaelsoares/alfredo/internal/gcalendar"
 	healthdomain "github.com/rafaelsoares/alfredo/internal/health/domain"
+	healthsvc "github.com/rafaelsoares/alfredo/internal/health/service"
 	"github.com/rafaelsoares/alfredo/internal/petcare/domain"
 	"github.com/rafaelsoares/alfredo/internal/petcare/service"
 	"github.com/rafaelsoares/alfredo/internal/shared/health"
@@ -97,6 +98,20 @@ type AppointmentServicer interface {
 	List(ctx context.Context, petID string) ([]domain.Appointment, error)
 	Update(ctx context.Context, petID, appointmentID string, in service.UpdateAppointmentInput) (*domain.Appointment, error)
 	Delete(ctx context.Context, petID, appointmentID string) error
+}
+
+// HealthAppointmentServicer is the narrow interface consumed by HealthAppointmentUseCase.
+type HealthAppointmentServicer interface {
+	Create(ctx context.Context, in healthsvc.CreateHealthAppointmentInput) (*healthdomain.HealthAppointment, error)
+	GetByID(ctx context.Context, id string) (*healthdomain.HealthAppointment, error)
+	List(ctx context.Context) ([]healthdomain.HealthAppointment, error)
+	Delete(ctx context.Context, id string) error
+}
+
+// HealthCalendarIDStorer is the narrow interface for storing and retrieving health calendar IDs.
+type HealthCalendarIDStorer interface {
+	GetCalendarID(ctx context.Context) (string, error)
+	SetCalendarID(ctx context.Context, calendarID string) error
 }
 
 type HealthInsightComputer interface {

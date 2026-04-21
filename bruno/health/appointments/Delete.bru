@@ -1,0 +1,15 @@
+meta {
+  name: Delete Health Appointment
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/health/appointments/{{appointmentId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}

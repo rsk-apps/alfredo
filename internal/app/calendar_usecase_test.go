@@ -247,8 +247,8 @@ func TestVaccineUseCaseRecordsEventAtAdministeredTimeWhenRecurring(t *testing.T)
 	if !calendar.createdEvents[1].StartTime.Equal(wantNextDue) {
 		t.Fatalf("expected next due event at %s, got %s", wantNextDue, calendar.createdEvents[1].StartTime)
 	}
-	if calendar.createdEvents[1].ReminderMin != 7*24*60 {
-		t.Fatalf("expected next due reminder 10080 minutes, got %d", calendar.createdEvents[1].ReminderMin)
+	if len(calendar.createdEvents[1].ReminderMins) != 1 || calendar.createdEvents[1].ReminderMins[0] != 7*24*60 {
+		t.Fatalf("expected next due reminder [10080], got %v", calendar.createdEvents[1].ReminderMins)
 	}
 	if vaccine.GoogleCalendarEventID != "evt-admin" {
 		t.Fatalf("expected administered event id evt-admin, got %q", vaccine.GoogleCalendarEventID)

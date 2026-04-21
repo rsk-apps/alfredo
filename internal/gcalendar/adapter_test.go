@@ -23,7 +23,7 @@ func TestToGoogleEventRecurringRuleAndTimezones(t *testing.T) {
 		Title:       "Amoxicillin",
 		StartTime:   time.Date(2026, 4, 12, 12, 0, 0, 0, time.UTC),
 		EndTime:     time.Date(2026, 4, 12, 12, 0, 0, 0, time.UTC),
-		ReminderMin: 0,
+		ReminderMins: nil,
 		TimeZone:    "America/Sao_Paulo",
 	}, 12)
 	if err != nil {
@@ -42,7 +42,7 @@ func TestToGoogleEventIncludesZeroValueReminderFields(t *testing.T) {
 		Title:       "Dose",
 		StartTime:   time.Date(2026, 4, 12, 12, 0, 0, 0, time.UTC),
 		EndTime:     time.Date(2026, 4, 12, 12, 0, 0, 0, time.UTC),
-		ReminderMin: 0,
+		ReminderMins: nil,
 		TimeZone:    "America/Sao_Paulo",
 	}, 0)
 	if err != nil {
@@ -54,9 +54,8 @@ func TestToGoogleEventIncludesZeroValueReminderFields(t *testing.T) {
 		t.Fatalf("marshal event: %v", err)
 	}
 	got := string(body)
-	for _, want := range []string{`"useDefault":false`, `"minutes":0`} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("expected marshaled event to contain %s, got %s", want, got)
-		}
+	// When ReminderMins is nil, Overrides should be an empty slice
+	if !strings.Contains(got, `"useDefault":false`) {
+		t.Fatalf("expected marshaled event to contain useDefault:false, got %s", got)
 	}
 }

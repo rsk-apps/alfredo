@@ -12,8 +12,10 @@ import (
 var errSQLiteDown = errors.New("sqlite down")
 
 type profileRepoStub struct {
-	getFn    func(context.Context) (domain.HealthProfile, error)
-	upsertFn func(context.Context, domain.HealthProfile) (domain.HealthProfile, error)
+	getFn            func(context.Context) (domain.HealthProfile, error)
+	upsertFn         func(context.Context, domain.HealthProfile) (domain.HealthProfile, error)
+	getCalendarIDFn  func(context.Context) (string, error)
+	setCalendarIDFn  func(context.Context, string) error
 }
 
 func (r *profileRepoStub) Get(ctx context.Context) (domain.HealthProfile, error) {
@@ -28,6 +30,20 @@ func (r *profileRepoStub) Upsert(ctx context.Context, profile domain.HealthProfi
 		return r.upsertFn(ctx, profile)
 	}
 	return profile, nil
+}
+
+func (r *profileRepoStub) GetCalendarID(ctx context.Context) (string, error) {
+	if r.getCalendarIDFn != nil {
+		return r.getCalendarIDFn(ctx)
+	}
+	return "", nil
+}
+
+func (r *profileRepoStub) SetCalendarID(ctx context.Context, calendarID string) error {
+	if r.setCalendarIDFn != nil {
+		return r.setCalendarIDFn(ctx, calendarID)
+	}
+	return nil
 }
 
 func TestProfileServiceGetPropagatesNotFound(t *testing.T) {

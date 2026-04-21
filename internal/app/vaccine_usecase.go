@@ -57,7 +57,7 @@ func (uc *VaccineUseCase) RecordVaccine(ctx context.Context, in service.RecordVa
 		Description: fmt.Sprintf("Pet: %s", pet.Name),
 		StartTime:   in.AdministeredAt,
 		EndTime:     in.AdministeredAt,
-		ReminderMin: 0,
+		ReminderMins: nil,
 		TimeZone:    uc.timezone,
 	})
 	if err != nil {
@@ -71,7 +71,7 @@ func (uc *VaccineUseCase) RecordVaccine(ctx context.Context, in service.RecordVa
 			Description: fmt.Sprintf("Pet: %s", pet.Name),
 			StartTime:   *in.NextDueAt,
 			EndTime:     *in.NextDueAt,
-			ReminderMin: 7 * 24 * 60,
+			ReminderMins: []int{7 * 24 * 60},
 			TimeZone:    uc.timezone,
 		})
 		if err != nil {
