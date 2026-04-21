@@ -32,7 +32,7 @@ Se o Rafael quiser marcar banho e tosa ou agendar grooming, use schedule_appoint
 Se o Rafael disser para registrar ou anotar uma observação, use log_observation.
 Quando o Rafael pedir resumo diário, digest, pendências de hoje ou prioridades dos pets, chame get_pet_summary, escreva uma mensagem curta em português com os itens acionáveis e depois chame send_telegram com essa mensagem.
 
-SAÚDE PESSOAL: Use as ferramentas de saúde (get_health_profile, get_health_metrics, list_workouts) para consultas pontuais sobre o próprio Rafael — peso, treinos, frequência cardíaca, sono, passos, VO2Max e outras métricas pessoais. Nunca use ferramentas de saúde para pets. Para pedidos de análises cruzadas ou tendências entre múltiplas métricas, responda que esse recurso ainda não está disponível.
+SAÚDE PESSOAL: Use as ferramentas de saúde (get_health_metrics, list_workouts) para consultas pontuais sobre o próprio Rafael — peso, treinos, frequência cardíaca, sono, passos, VO2Max e outras métricas pessoais. Nunca use ferramentas de saúde para pets. Para análises cruzadas, tendências, IMC, resumo geral ou perguntas como "como estou me saindo na saúde?", use get_health_summary. Para consultas pontuais de uma única métrica (ex: "qual meu peso ontem?"), use get_health_metrics diretamente.
 
 Nunca invente identificadores.
 Se o pedido do Rafael estiver ambíguo ou faltar informação essencial, responda apenas que não conseguiu concluir o pedido.`
@@ -84,6 +84,7 @@ type AgentUseCase struct {
 	healthProfile  HealthProfileQuerier
 	healthMetrics  HealthMetricsQuerier
 	healthWorkouts HealthWorkoutsQuerier
+	healthInsight  HealthInsightComputer
 	timezone       *time.Location
 	logger         *zap.Logger
 	tools          []agentdomain.Tool
@@ -102,6 +103,7 @@ func NewAgentUseCase(
 	healthProfile HealthProfileQuerier,
 	healthMetrics HealthMetricsQuerier,
 	healthWorkouts HealthWorkoutsQuerier,
+	healthInsight HealthInsightComputer,
 	timezone *time.Location,
 	logger *zap.Logger,
 ) *AgentUseCase {
@@ -121,6 +123,7 @@ func NewAgentUseCase(
 		healthProfile:  healthProfile,
 		healthMetrics:  healthMetrics,
 		healthWorkouts: healthWorkouts,
+		healthInsight:  healthInsight,
 		timezone:       timezone,
 		logger:         logger,
 		tools:          buildAgentTools(),
@@ -350,6 +353,22 @@ func (uc *AgentUseCase) DispatchToolCall(ctx context.Context, call agentdomain.T
 			return errorToolResult(call, err), err
 		}
 		result = workouts
+	case "get_health_summary":
+		if uc.healthInsight == nil {
+			err := fmt.Errorf("health insight service is not configured")
+			return errorToolResult(call, err), err
+		}
+		days := 14
+		if v, ok := call.Arguments["days"]; ok && v != nil {
+			if n, err := numberToInt(v, "days"); err == nil && n > 0 {
+				days = n
+			}
+		}
+		insight, err := uc.healthInsight.Compute(ctx, days)
+		if err != nil {
+			return errorToolResult(call, err), err
+		}
+		result = insight
 	default:
 		err := fmt.Errorf("unknown tool %q", call.Name)
 		return errorToolResult(call, err), err
@@ -735,6 +754,7 @@ func buildAgentTools() []agentdomain.Tool {
 		tool("get_health_profile", "Get Rafael's personal health profile (height, birth date, sex). Use ONLY for data about Rafael himself — not for any pet.", objectSchema(nil, nil)),
 		tool("get_health_metrics", "Query Rafael's personal daily health metrics by metric type (e.g. weight, bodyFat, restingHeartRate, stepCount, sleepTime, walkingDistance, vo2Max). Optional from and to dates in YYYY-MM-DD format narrow the result. Use ONLY for data about Rafael himself — not for any pet.", objectSchema(properties("metric_type", "string", "from", "string", "to", "string"), []string{"metric_type"})),
 		tool("list_workouts", "List Rafael's workout sessions from Apple Watch (activity type, duration, calories burned, heart rate). Optional from and to dates in YYYY-MM-DD format narrow the result. Use ONLY for Rafael's own workouts — not for pet activities.", objectSchema(properties("from", "string", "to", "string"), nil)),
+		tool("get_health_summary", "Computa um resumo derivado de saúde (tendência de peso, frequência cardíaca, sono, treinos, IMC, VO2Max) para uma janela de dias. Retorna dados estruturados. Use para perguntas como 'como estou me saindo na saúde?', 'estou engordando?', 'meu sono está ruim?', 'qual meu IMC?', 'minha frequência cardíaca está alta?'. O parâmetro days é opcional (padrão: 14).", objectSchema(map[string]any{"days": map[string]any{"type": "integer"}}, nil)),
 	}
 }
 

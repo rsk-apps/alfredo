@@ -55,7 +55,7 @@ func (r *failingAgentRouter) Execute(
 
 func TestAgentUseCaseHandleUsesOneShotPrompt(t *testing.T) {
 	router := &recordingAgentRouter{}
-	uc := NewAgentUseCase(router, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, zap.NewNop())
+	uc := NewAgentUseCase(router, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, zap.NewNop())
 
 	reply, err := uc.Handle(context.Background(), "Nutella tomou banho quando?")
 	if err != nil {
@@ -96,7 +96,7 @@ func TestAgentUseCaseHandleUsesOneShotPrompt(t *testing.T) {
 
 func TestAgentUseCaseHandleReturnsRouterFallbackReply(t *testing.T) {
 	router := &failingAgentRouter{reply: "Não consegui concluir.", err: errors.New("router down")}
-	uc := NewAgentUseCase(router, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, zap.NewNop())
+	uc := NewAgentUseCase(router, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, zap.NewNop())
 
 	reply, err := uc.Handle(context.Background(), "resumo dos pets")
 	if err != nil {
@@ -108,7 +108,7 @@ func TestAgentUseCaseHandleReturnsRouterFallbackReply(t *testing.T) {
 }
 
 func TestAgentUseCaseNilLoggerDefault(t *testing.T) {
-	uc := NewAgentUseCase(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, nil)
+	uc := NewAgentUseCase(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, nil)
 	if uc == nil {
 		t.Fatal("expected non-nil use case")
 	}
@@ -118,9 +118,9 @@ func TestAgentSystemPromptHealthDisambiguation(t *testing.T) {
 	required := []string{
 		"SAÚDE PESSOAL",
 		"PETS:",
-		"get_health_profile",
 		"get_health_metrics",
 		"list_workouts",
+		"get_health_summary",
 		"Nunca use ferramentas de saúde para pets",
 	}
 	for _, want := range required {
@@ -210,7 +210,7 @@ func TestBuildAgentToolsDailyDigestMetadata(t *testing.T) {
 }
 
 func TestAgentUseCaseSendTelegramIsBestEffort(t *testing.T) {
-	uc := NewAgentUseCase(nil, nil, nil, nil, nil, nil, nil, nil, failingTelegram{err: errors.New("telegram down")}, nil, nil, nil, time.UTC, zap.NewNop())
+	uc := NewAgentUseCase(nil, nil, nil, nil, nil, nil, nil, nil, failingTelegram{err: errors.New("telegram down")}, nil, nil, nil, nil, time.UTC, zap.NewNop())
 
 	result, err := uc.DispatchToolCall(context.Background(), agentdomain.ToolCall{
 		ID:        "call-1",
@@ -230,7 +230,7 @@ func TestAgentUseCaseSendTelegramIsBestEffort(t *testing.T) {
 
 func TestAgentUseCaseSendTelegramReportsSuccessAndMissingAdapter(t *testing.T) {
 	success := &recordingTelegram{}
-	uc := NewAgentUseCase(nil, nil, nil, nil, nil, nil, nil, nil, success, nil, nil, nil, time.UTC, zap.NewNop())
+	uc := NewAgentUseCase(nil, nil, nil, nil, nil, nil, nil, nil, success, nil, nil, nil, nil, time.UTC, zap.NewNop())
 
 	result, err := uc.DispatchToolCall(context.Background(), agentdomain.ToolCall{
 		ID:        "call-1",
@@ -248,7 +248,7 @@ func TestAgentUseCaseSendTelegramReportsSuccessAndMissingAdapter(t *testing.T) {
 		t.Fatalf("telegram messages = %#v, want one sent message", success.messages)
 	}
 
-	withoutTelegram := NewAgentUseCase(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, zap.NewNop())
+	withoutTelegram := NewAgentUseCase(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, time.UTC, zap.NewNop())
 	result, err = withoutTelegram.DispatchToolCall(context.Background(), agentdomain.ToolCall{
 		ID:        "call-2",
 		Name:      "send_telegram",
@@ -744,7 +744,7 @@ func TestAgentUseCaseDispatchToolErrors(t *testing.T) {
 			name: "summary not configured",
 			call: toolCall("get_pet_summary", nil),
 			useCase: func(d *agentTestDeps) *AgentUseCase {
-				return NewAgentUseCase(nil, d.pets, d.vaccines, d.treatments, d.observations, d.appointments, d.supplies, nil, nil, nil, nil, nil, loc, zap.NewNop())
+				return NewAgentUseCase(nil, d.pets, d.vaccines, d.treatments, d.observations, d.appointments, d.supplies, nil, nil, nil, nil, nil, nil, loc, zap.NewNop())
 			},
 			wantMessage: "summary use case is not configured",
 		},
@@ -1181,7 +1181,7 @@ func newAgentTestDeps() *agentTestDeps {
 }
 
 func (d *agentTestDeps) useCase(loc *time.Location) *AgentUseCase {
-	return NewAgentUseCase(nil, d.pets, d.vaccines, d.treatments, d.observations, d.appointments, d.supplies, d.summary, nil, d.healthProfile, d.healthMetrics, d.healthWorkouts, loc, zap.NewNop())
+	return NewAgentUseCase(nil, d.pets, d.vaccines, d.treatments, d.observations, d.appointments, d.supplies, d.summary, nil, d.healthProfile, d.healthMetrics, d.healthWorkouts, nil, loc, zap.NewNop())
 }
 
 type failingTelegram struct {
