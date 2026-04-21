@@ -1,12 +1,12 @@
 meta {
-  name: Update supply
+name: Get Supply
   type: http
-  seq: 4
+  seq: 3
 }
 
-patch {
+get {
   url: {{baseUrl}}/api/v1/pets/:id/supplies/:sid
-  body: json
+  body: none
   auth: none
 }
 
@@ -17,12 +17,4 @@ headers {
 params:path {
   id: {{petId}}
   sid: {{supplyId}}
-}
-
-body:json {
-  {
-    "last_purchased_at": "2026-05-16",
-    "estimated_days_supply": 30,
-    "notes": "Novo pacote aberto"
-  }
 }
