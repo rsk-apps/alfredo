@@ -172,6 +172,13 @@ func toGoogleEvent(event Event, intervalHours int) (*calendar.Event, error) {
 	if !end.After(event.StartTime) {
 		end = event.StartTime.Add(time.Minute)
 	}
+	overrides := make([]*calendar.EventReminder, 0, len(event.ReminderMins))
+	for _, min := range event.ReminderMins {
+		overrides = append(overrides, &calendar.EventReminder{
+			Method: "popup", Minutes: int64(min),
+			ForceSendFields: []string{"Minutes"},
+		})
+	}
 	gEvent := &calendar.Event{
 		Summary:     event.Title,
 		Description: event.Description,
@@ -186,9 +193,7 @@ func toGoogleEvent(event Event, intervalHours int) (*calendar.Event, error) {
 		Reminders: &calendar.EventReminders{
 			UseDefault:      false,
 			ForceSendFields: []string{"UseDefault"},
-			Overrides: []*calendar.EventReminder{
-				{Method: "popup", Minutes: int64(event.ReminderMin), ForceSendFields: []string{"Minutes"}},
-			},
+			Overrides:       overrides,
 		},
 	}
 	if event.Location != "" {

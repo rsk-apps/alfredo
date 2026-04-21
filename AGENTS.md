@@ -144,6 +144,8 @@ make generate       # mockery
 
 `make run` auto-sources `.env` from the project root if present — use it to set `APP_AUTH_API_KEY` and other vars locally without modifying `config.yaml`.
 
+Run `make hooks` after cloning or refreshing the repo hooks. It installs both `pre-commit` and `pre-push`; the push hook runs `make guard` and the verifier gate for any stories or Execution Reviews being pushed to `done`.
+
 ### Testing
 
 - **Domain service tests** (petcare/service): mock repository interfaces, test CRUD logic in isolation
@@ -159,7 +161,7 @@ docker compose -f docker-compose.prod.yml up -d   # uses ghcr.io/rafaelsoares/al
 
 ## Prerequisites
 
-- Go 1.26+
+- Go 1.26.2+
 
 ## Configuration
 

@@ -1,0 +1,15 @@
+meta {
+  name: Get Health Appointment by ID
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/health/appointments/{{appointmentId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{apiKey}}
+}

@@ -12,7 +12,7 @@ type Event struct {
 	Location    string // optional — omitted from Google Calendar request when empty
 	StartTime   time.Time
 	EndTime     time.Time
-	ReminderMin int
+	ReminderMins []int
 	TimeZone    string
 }
 

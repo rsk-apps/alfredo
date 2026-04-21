@@ -31,3 +31,11 @@ func (s *ProfileService) Upsert(ctx context.Context, profile domain.HealthProfil
 	}
 	return created, nil
 }
+
+func (s *ProfileService) GetCalendarID(ctx context.Context) (string, error) {
+	return s.repo.GetCalendarID(ctx)
+}
+
+func (s *ProfileService) SetCalendarID(ctx context.Context, calendarID string) error {
+	return s.repo.SetCalendarID(ctx, calendarID)
+}

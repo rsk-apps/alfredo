@@ -325,6 +325,235 @@ func TestHealthProfileRouteIsProtectedAndPersists(t *testing.T) {
 	requireEqual(t, "male", fetched.Sex, "fetched health profile sex")
 }
 
+func TestHealthAppointmentLifecyclePersistsFieldsAndCalendarSideEffects(t *testing.T) {
+	fx := newFixture(t)
+
+	rec := fx.doJSON(http.MethodPost, "/api/v1/health/appointments", map[string]any{
+		"specialty":    "Cardiologia",
+		"scheduled_at": "2026-05-10T09:00:00",
+		"doctor":       "Dr. Silva",
+		"notes":        "Checkup anual",
+	}, "bearer")
+	requireStatus(t, rec, http.StatusCreated)
+	var appointment healthAppointmentResponse
+	decodeJSON(t, rec, &appointment)
+	requireNonEmpty(t, appointment.ID, "appointment id")
+	requireEqual(t, "Cardiologia", appointment.Specialty, "appointment specialty")
+	requireEqual(t, "2026-05-10T09:00:00-03:00", appointment.ScheduledAt, "appointment scheduled_at")
+	requireEqual(t, "evt-01", appointment.GoogleCalendarEventID, "appointment event id")
+	requireEqual(t, 1, len(fx.calendar.createdCalendars), "health calendar create count")
+	requireEqual(t, "Saúde", fx.calendar.createdCalendars[0].Name, "health calendar name")
+	requireEqual(t, 1, len(fx.calendar.createdEvents), "health appointment event count")
+	requireEqual(t, "cal-01", fx.calendar.createdEvents[0].CalendarID, "health appointment event calendar id")
+	requireEqual(t, "Consulta: Cardiologia", fx.calendar.createdEvents[0].Event.Title, "health appointment event title")
+	requireEqual(t, "Dr. Silva", fx.calendar.createdEvents[0].Event.Description, "health appointment event description")
+	requireEqual(t, 3, len(fx.calendar.createdEvents[0].Event.ReminderMins), "health appointment reminder count")
+	requireEqual(t, 1440, fx.calendar.createdEvents[0].Event.ReminderMins[0], "health appointment first reminder")
+	requireEqual(t, 120, fx.calendar.createdEvents[0].Event.ReminderMins[1], "health appointment second reminder")
+	requireEqual(t, 60, fx.calendar.createdEvents[0].Event.ReminderMins[2], "health appointment third reminder")
+	requireEqual(t, 1, fx.telegram.count(), "telegram messages after health appointment create")
+	assertTelegramHTML(t, fx.telegram.message(0), []string{
+		"<b>Consulta agendada</b>",
+		"<b>Especialidade:</b> Cardiologia",
+		"<b>Data:</b> 10/05/2026 09:00",
+		"<b>Médico:</b> Dr. Silva",
+		"<b>Notas:</b> Checkup anual",
+	})
+
+	row := queryHealthAppointment(t, fx.db, appointment.ID)
+	requireEqual(t, "Cardiologia", row.Specialty, "db appointment specialty")
+	requireEqual(t, "2026-05-10T09:00:00-03:00", row.ScheduledAt, "db appointment scheduled_at")
+	requireEqual(t, "Dr. Silva", row.Doctor.String, "db appointment doctor")
+	requireEqual(t, "Checkup anual", row.Notes.String, "db appointment notes")
+	requireEqual(t, "evt-01", row.GoogleCalendarEventID, "db appointment event id")
+	requireNonEmpty(t, row.CreatedAt, "db appointment created_at")
+
+	earlier := fx.createHealthAppointment(map[string]any{
+		"specialty":    "Dermatologia",
+		"scheduled_at": "2026-05-01T14:00:00-03:00",
+	})
+
+	rec = fx.doJSON(http.MethodGet, "/api/v1/health/appointments", nil, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var listed []healthAppointmentResponse
+	decodeJSON(t, rec, &listed)
+	requireEqual(t, 2, len(listed), "listed health appointment count")
+	requireEqual(t, earlier.ID, listed[0].ID, "first listed health appointment id")
+	requireEqual(t, appointment.ID, listed[1].ID, "second listed health appointment id")
+
+	rec = fx.doJSON(http.MethodGet, "/api/v1/health/appointments/"+appointment.ID, nil, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var fetched healthAppointmentResponse
+	decodeJSON(t, rec, &fetched)
+	requireEqual(t, appointment.ID, fetched.ID, "fetched health appointment id")
+	requireEqual(t, appointment.GoogleCalendarEventID, fetched.GoogleCalendarEventID, "fetched health appointment event id")
+
+	rec = fx.doJSON(http.MethodDelete, "/api/v1/health/appointments/"+appointment.ID, nil, "bearer")
+	requireStatus(t, rec, http.StatusNoContent)
+	requireEqual(t, 1, len(fx.calendar.deletedEvents), "deleted health appointment event count")
+	requireEqual(t, "cal-01", fx.calendar.deletedEvents[0].CalendarID, "deleted health appointment event calendar id")
+	requireEqual(t, "evt-01", fx.calendar.deletedEvents[0].EventID, "deleted health appointment event id")
+	requireEqual(t, 1, countRows(t, fx.db, "health_appointments"), "health appointment rows after delete")
+	requireEqual(t, 3, fx.telegram.count(), "telegram messages after health appointment delete")
+	assertTelegramHTML(t, fx.telegram.message(2), []string{
+		"<b>Consulta cancelada</b>",
+		"<b>Especialidade:</b> Cardiologia",
+		"<b>Data:</b> 10/05/2026 09:00",
+	})
+}
+
+func TestHealthAppointmentValidationAndFailuresPreserveState(t *testing.T) {
+	fx := newFixture(t)
+
+	rec := fx.doJSON(http.MethodGet, "/api/v1/health/appointments", nil, "")
+	requireStatus(t, rec, http.StatusUnauthorized)
+
+	rec = fx.doJSON(http.MethodPost, "/api/v1/health/appointments", map[string]any{
+		"specialty":    "",
+		"scheduled_at": "2026-05-10T09:00:00",
+	}, "bearer")
+	requireStatus(t, rec, http.StatusBadRequest)
+	requireEqual(t, 0, countRows(t, fx.db, "health_appointments"), "health appointment rows after empty specialty")
+	requireEqual(t, 0, len(fx.calendar.createdEvents), "calendar events after empty specialty")
+
+	rec = fx.doJSON(http.MethodPost, "/api/v1/health/appointments", map[string]any{
+		"specialty":    "Cardiologia",
+		"scheduled_at": "2026-05-10",
+	}, "bearer")
+	requireStatus(t, rec, http.StatusBadRequest)
+	requireEqual(t, 0, countRows(t, fx.db, "health_appointments"), "health appointment rows after date-only scheduled_at")
+	requireEqual(t, 0, len(fx.calendar.createdEvents), "calendar events after invalid scheduled_at")
+
+	fx.calendar.failCreateEvent = errors.New("calendar event failed")
+	rec = fx.doJSON(http.MethodPost, "/api/v1/health/appointments", map[string]any{
+		"specialty":    "Cardiologia",
+		"scheduled_at": "2026-05-10T09:00:00",
+	}, "bearer")
+	requireStatus(t, rec, http.StatusInternalServerError)
+	requireEqual(t, 0, countRows(t, fx.db, "health_appointments"), "health appointment rows after calendar create failure")
+	requireEqual(t, 0, fx.telegram.count(), "telegram messages after appointment calendar create failure")
+
+	fx = newFixture(t)
+	appointment := fx.createHealthAppointment(map[string]any{
+		"specialty":    "Cardiologia",
+		"scheduled_at": "2026-05-10T09:00:00",
+	})
+
+	rec = fx.doJSON(http.MethodGet, "/api/v1/health/appointments/not-a-uuid", nil, "bearer")
+	requireStatus(t, rec, http.StatusNotFound)
+
+	rec = fx.doJSON(http.MethodDelete, "/api/v1/health/appointments/123e4567-e89b-12d3-a456-426614174999", nil, "bearer")
+	requireStatus(t, rec, http.StatusNotFound)
+
+	fx.calendar.failDeleteEvent = errors.New("calendar delete failed")
+	rec = fx.doJSON(http.MethodDelete, "/api/v1/health/appointments/"+appointment.ID, nil, "bearer")
+	requireStatus(t, rec, http.StatusInternalServerError)
+	requireEqual(t, 1, countRows(t, fx.db, "health_appointments"), "health appointment rows after calendar delete failure")
+
+	fx = newFixture(t)
+	fx.telegram.failSend = errors.New("telegram unavailable")
+	rec = fx.doJSON(http.MethodPost, "/api/v1/health/appointments", map[string]any{
+		"specialty":    "Dermatologia",
+		"scheduled_at": "2026-06-20T11:30:00",
+	}, "bearer")
+	requireStatus(t, rec, http.StatusCreated)
+	requireEqual(t, 1, countRows(t, fx.db, "health_appointments"), "health appointment rows after telegram failure")
+	requireEqual(t, 1, fx.telegram.count(), "telegram send attempts after health appointment telegram failure")
+}
+
+func TestSummaryAndHealthRoutesHaveIntegrationCoverage(t *testing.T) {
+	fx := newFixture(t)
+	pet := fx.createPet(map[string]any{"name": "Luna", "species": "dog"})
+
+	rec := fx.doJSON(http.MethodGet, "/api/v1/pets/summary", nil, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var summary struct {
+		GeneratedAt string `json:"generated_at"`
+		Pets        []struct {
+			Pet petResponse `json:"pet"`
+		} `json:"pets"`
+	}
+	decodeJSON(t, rec, &summary)
+	requireNonEmpty(t, summary.GeneratedAt, "summary generated_at")
+	requireEqual(t, 1, len(summary.Pets), "summary pet count")
+	requireEqual(t, pet.ID, summary.Pets[0].Pet.ID, "summary pet id")
+
+	rec = fx.doJSON(http.MethodPost, "/api/v1/health/metrics/import", map[string]any{
+		"weight": []map[string]any{
+			{
+				"date":  "2026-04-18",
+				"value": 80.5,
+				"unit":  "kg",
+			},
+		},
+	}, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var metricImport struct {
+		Imported int `json:"imported"`
+	}
+	decodeJSON(t, rec, &metricImport)
+	requireEqual(t, 1, metricImport.Imported, "metric import count")
+	requireEqual(t, 1, countRows(t, fx.db, "health_daily_metrics"), "health daily metric rows")
+
+	rec = fx.doJSON(http.MethodGet, "/api/v1/health/metrics?type=weight&from=2026-04-01&to=2026-04-30", nil, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var metrics []struct {
+		MetricType string  `json:"metric_type"`
+		Value      float64 `json:"value"`
+	}
+	decodeJSON(t, rec, &metrics)
+	requireEqual(t, 1, len(metrics), "listed metric count")
+	requireEqual(t, "weight", metrics[0].MetricType, "listed metric type")
+	requireEqual(t, 80.5, metrics[0].Value, "listed metric value")
+
+	rec = fx.doJSON(http.MethodPost, "/api/v1/health/workouts/import", map[string]any{
+		"workouts": []map[string]any{
+			{
+				"activityType": "walking",
+				"startDate":    "2026-04-18T10:00:00Z",
+				"endDate":      "2026-04-18T10:30:00Z",
+				"duration":     1800,
+				"source":       "Apple Watch",
+				"statistics": map[string]any{
+					"HKQuantityTypeIdentifierActiveEnergyBurned": map[string]any{"sum": 350.0},
+				},
+			},
+		},
+	}, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var workoutImport struct {
+		Imported int `json:"imported"`
+	}
+	decodeJSON(t, rec, &workoutImport)
+	requireEqual(t, 1, workoutImport.Imported, "workout import count")
+	requireEqual(t, 1, countRows(t, fx.db, "health_workout_sessions"), "health workout rows")
+
+	rec = fx.doJSON(http.MethodGet, "/api/v1/health/workouts?from=2026-04-01&to=2026-04-30", nil, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var workouts []struct {
+		ActivityType string  `json:"activity_type"`
+		Source       string  `json:"source"`
+		Duration     float64 `json:"duration_seconds"`
+	}
+	decodeJSON(t, rec, &workouts)
+	requireEqual(t, 1, len(workouts), "listed workout count")
+	requireEqual(t, "walking", workouts[0].ActivityType, "listed workout activity type")
+	requireEqual(t, "Apple Watch", workouts[0].Source, "listed workout source")
+	requireEqual(t, 1800.0, workouts[0].Duration, "listed workout duration")
+
+	rec = fx.doJSON(http.MethodPost, "/api/v1/health/digest", map[string]any{"days": 7}, "bearer")
+	requireStatus(t, rec, http.StatusOK)
+	var digest struct {
+		Status string `json:"status"`
+		Days   int    `json:"days"`
+	}
+	decodeJSON(t, rec, &digest)
+	requireEqual(t, "sent", digest.Status, "digest status")
+	requireEqual(t, 7, digest.Days, "digest days")
+	requireEqual(t, 1, fx.telegram.count(), "telegram messages after digest")
+	requireContains(t, fx.telegram.message(0).Text, "Resumo de Saúde", "digest telegram message")
+}
+
 func TestAgentSiriEndpointAuthValidationAndNoop(t *testing.T) {
 	fx := newFixture(t)
 
@@ -512,7 +741,7 @@ func TestVaccineLifecyclePersistsFieldsAndCalendarSideEffects(t *testing.T) {
 	requireEqual(t, "cal-01", fx.calendar.createdEvents[0].CalendarID, "vaccine event calendar id")
 	requireEqual(t, "Rabies", fx.calendar.createdEvents[0].Event.Title, "vaccine event title")
 	requireEqual(t, "Pet: Luna", fx.calendar.createdEvents[0].Event.Description, "vaccine event description")
-	requireEqual(t, 0, fx.calendar.createdEvents[0].Event.ReminderMin, "vaccine event reminder")
+	requireEqual(t, 0, len(fx.calendar.createdEvents[0].Event.ReminderMins), "vaccine event reminder")
 	requireEqual(t, "America/Sao_Paulo", fx.calendar.createdEvents[0].Event.TimeZone, "vaccine event timezone")
 	requireEqual(t, 1, fx.telegram.count(), "telegram message count after vaccine create")
 	assertTelegramHTML(t, fx.telegram.message(0), []string{
@@ -547,10 +776,10 @@ func TestVaccineLifecyclePersistsFieldsAndCalendarSideEffects(t *testing.T) {
 	requireEqual(t, "evt-02", recurring.GoogleCalendarEventID, "recurring vaccine event id")
 	requireEqual(t, "evt-03", recurring.GoogleCalendarNextDueEventID, "recurring vaccine next due event id")
 	requireEqual(t, 3, len(fx.calendar.createdEvents), "vaccine event count after recurrence")
-	requireEqual(t, 0, fx.calendar.createdEvents[1].Event.ReminderMin, "recurring vaccine administered reminder")
+	requireEqual(t, 0, len(fx.calendar.createdEvents[1].Event.ReminderMins), "recurring vaccine administered reminder")
 	requireEqual(t, "V10", fx.calendar.createdEvents[1].Event.Title, "recurring vaccine administered title")
 	requireEqual(t, "2026-06-01T08:00:00-03:00", fx.calendar.createdEvents[1].Event.StartTime.Format(time.RFC3339), "recurring vaccine administered event time")
-	requireEqual(t, 7*24*60, fx.calendar.createdEvents[2].Event.ReminderMin, "recurring vaccine next due reminder")
+	requireEqual(t, 7*24*60, fx.calendar.createdEvents[2].Event.ReminderMins[0], "recurring vaccine next due reminder")
 	requireEqual(t, "Next due: V10", fx.calendar.createdEvents[2].Event.Title, "recurring vaccine next due event title")
 	requireEqual(t, "2027-06-01T08:00:00-03:00", fx.calendar.createdEvents[2].Event.StartTime.Format(time.RFC3339), "recurring vaccine next due event time")
 	requireEqual(t, 2, fx.telegram.count(), "telegram message count after recurring vaccine create")
@@ -1189,6 +1418,14 @@ func (fx *fixture) createSupply(petID string, body map[string]any) supplyRespons
 	return supply
 }
 
+func (fx *fixture) createHealthAppointment(body map[string]any) healthAppointmentResponse {
+	rec := fx.doJSON(http.MethodPost, "/api/v1/health/appointments", body, "bearer")
+	requireStatus(fx.t, rec, http.StatusCreated)
+	var appointment healthAppointmentResponse
+	decodeJSON(fx.t, rec, &appointment)
+	return appointment
+}
+
 func (fx *fixture) doJSON(method, path string, body any, auth string) *httptest.ResponseRecorder {
 	var payload []byte
 	if body != nil {
@@ -1285,6 +1522,16 @@ type supplyResponse struct {
 	UpdatedAt           string  `json:"updated_at"`
 }
 
+type healthAppointmentResponse struct {
+	ID                    string  `json:"id"`
+	Specialty             string  `json:"specialty"`
+	ScheduledAt           string  `json:"scheduled_at"`
+	Doctor                *string `json:"doctor"`
+	Notes                 *string `json:"notes"`
+	GoogleCalendarEventID string  `json:"google_calendar_event_id"`
+	CreatedAt             string  `json:"created_at"`
+}
+
 type petRow struct {
 	ID               string
 	Name             string
@@ -1345,6 +1592,16 @@ type supplyRow struct {
 	Notes               sql.NullString
 	CreatedAt           string
 	UpdatedAt           string
+}
+
+type healthAppointmentRow struct {
+	ID                    string
+	Specialty             string
+	ScheduledAt           string
+	Doctor                sql.NullString
+	Notes                 sql.NullString
+	GoogleCalendarEventID string
+	CreatedAt             string
 }
 
 func queryPet(t *testing.T, db *sql.DB, id string) petRow {
@@ -1408,6 +1665,19 @@ func querySupply(t *testing.T, db *sql.DB, id string) supplyRow {
 	).Scan(&row.ID, &row.PetID, &row.Name, &row.LastPurchasedAt, &row.EstimatedDaysSupply, &row.Notes, &row.CreatedAt, &row.UpdatedAt)
 	if err != nil {
 		t.Fatalf("query supply %q: %v", id, err)
+	}
+	return row
+}
+
+func queryHealthAppointment(t *testing.T, db *sql.DB, id string) healthAppointmentRow {
+	t.Helper()
+	var row healthAppointmentRow
+	err := db.QueryRow(`
+		SELECT id, specialty, scheduled_at, doctor, notes, google_calendar_event_id, created_at
+		FROM health_appointments WHERE id = ?`, id,
+	).Scan(&row.ID, &row.Specialty, &row.ScheduledAt, &row.Doctor, &row.Notes, &row.GoogleCalendarEventID, &row.CreatedAt)
+	if err != nil {
+		t.Fatalf("query health appointment %q: %v", id, err)
 	}
 	return row
 }

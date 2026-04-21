@@ -33,7 +33,11 @@ func (a *NoopAdapter) DeleteCalendar(_ context.Context, calendarID string) error
 }
 
 func (a *NoopAdapter) CreateEvent(_ context.Context, calendarID string, event Event) (string, error) {
-	id := deterministicID("event", calendarID, event.Title, event.StartTime.Format(time.RFC3339Nano), event.EndTime.Format(time.RFC3339Nano), event.TimeZone, fmt.Sprintf("%d", event.ReminderMin))
+	reminderStr := ""
+	for _, m := range event.ReminderMins {
+		reminderStr += fmt.Sprintf("%d,", m)
+	}
+	id := deterministicID("event", calendarID, event.Title, event.StartTime.Format(time.RFC3339Nano), event.EndTime.Format(time.RFC3339Nano), event.TimeZone, reminderStr)
 	a.logger.Info("gcalendar noop create event",
 		zap.String("calendar_id", calendarID),
 		zap.String("event_id", id),

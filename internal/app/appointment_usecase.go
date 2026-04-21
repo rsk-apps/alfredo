@@ -58,7 +58,7 @@ func (uc *AppointmentUseCase) Create(ctx context.Context, in service.CreateAppoi
 		Description: fmt.Sprintf("Pet: %s", pet.Name),
 		StartTime:   in.ScheduledAt,
 		EndTime:     in.ScheduledAt.Add(time.Hour),
-		ReminderMin: 24 * 60,
+		ReminderMins: []int{24 * 60},
 		TimeZone:    uc.timezone,
 	})
 	if err != nil {
@@ -195,7 +195,7 @@ func (uc *AppointmentUseCase) appointmentCalendarEvent(pet *domain.Pet, appt *do
 		Description: fmt.Sprintf("Pet: %s", pet.Name),
 		StartTime:   appt.ScheduledAt,
 		EndTime:     appt.ScheduledAt.Add(time.Hour),
-		ReminderMin: 24 * 60,
+		ReminderMins: []int{24 * 60},
 		TimeZone:    uc.timezone,
 	}
 }

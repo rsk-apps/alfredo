@@ -92,6 +92,10 @@ The `/tl` skill also serves as an on-demand advisor for architecture review, Go-
 | `GET /api/v1/health/metrics` | MetricHandler |
 | `POST /api/v1/health/workouts/import` | WorkoutHandler |
 | `GET /api/v1/health/workouts` | WorkoutHandler |
+| `POST /api/v1/health/appointments` | HealthAppointmentHandler |
+| `GET /api/v1/health/appointments` | HealthAppointmentHandler |
+| `GET /api/v1/health/appointments/:id` | HealthAppointmentHandler |
+| `DELETE /api/v1/health/appointments/:id` | HealthAppointmentHandler |
 | `GET /api/v1/pets` | PetHandler |
 | `GET /api/v1/pets/summary` | SummaryHandler |
 | `POST /api/v1/pets` | PetHandler |
@@ -122,14 +126,14 @@ The `/tl` skill also serves as an on-demand advisor for architecture review, Go-
 
 ## API Collection
 
-The `bruno/` directory at repo root contains a [Bruno](https://www.usebruno.com/) importable collection covering all 33 routes. It is the **source of truth for route documentation** — keep it in sync whenever routes are added or removed.
+The `bruno/` directory at repo root contains a [Bruno](https://www.usebruno.com/) importable collection covering all 37 routes. It is the **source of truth for route documentation** — keep it in sync whenever routes are added or removed.
 
 ```
 bruno/
 ├── bruno.json              — collection metadata
 ├── environments/Local.bru  — baseUrl + sample UUIDs for local dev
 ├── Healthcheck.bru
-├── health/                 — profile, metrics, and workouts requests
+├── health/                 — profile, metrics, workouts, and appointments requests
 ├── pets/                   — 6 requests (CRUD + summary)
 ├── vaccines/               — 3 requests
 ├── treatments/             — 4 requests (CRUD)
@@ -162,6 +166,8 @@ make generate       # mockery
 
 `make run` auto-sources `.env` from the project root if present — use it to set `APP_AUTH_API_KEY` and other vars locally without modifying `config.yaml`.
 
+Run `make hooks` after cloning or refreshing the repo hooks. It installs both `pre-commit` and `pre-push`; the push hook runs `make guard` and the verifier gate for any stories or Execution Reviews being pushed to `done`.
+
 ### Testing
 
 - **Domain service tests** (petcare/service): mock repository interfaces, test CRUD logic in isolation
@@ -177,7 +183,7 @@ docker compose -f docker-compose.prod.yml up -d   # uses ghcr.io/rafaelsoares/al
 
 ## Prerequisites
 
-- Go 1.26+
+- Go 1.26.2+
 
 ## Configuration
 

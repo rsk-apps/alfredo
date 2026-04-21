@@ -68,6 +68,36 @@ func TestProfileRepositoryGetUpsertAndSingletonSemantics(t *testing.T) {
 	}
 }
 
+func TestProfileRepositoryCalendarIDDoesNotRequireProfileRow(t *testing.T) {
+	db := openHealthTestDB(t)
+	repo := NewProfileRepository(db)
+	ctx := context.Background()
+
+	got, err := repo.GetCalendarID(ctx)
+	if err != nil {
+		t.Fatalf("get empty calendar id: %v", err)
+	}
+	if got != "" {
+		t.Fatalf("empty calendar id = %q, want empty", got)
+	}
+
+	if err := repo.SetCalendarID(ctx, "cal-health"); err != nil {
+		t.Fatalf("set calendar id: %v", err)
+	}
+
+	got, err = repo.GetCalendarID(ctx)
+	if err != nil {
+		t.Fatalf("get stored calendar id: %v", err)
+	}
+	if got != "cal-health" {
+		t.Fatalf("stored calendar id = %q, want %q", got, "cal-health")
+	}
+
+	if n := countHealthRows(t, db); n != 0 {
+		t.Fatalf("health_profiles rows = %d, want 0", n)
+	}
+}
+
 func openHealthTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := database.Open(filepath.Join(t.TempDir(), "alfredo.db"))

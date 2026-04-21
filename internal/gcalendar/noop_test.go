@@ -15,7 +15,7 @@ func TestNoopAdapterReturnsDeterministicIDs(t *testing.T) {
 		Title:       "Rabies",
 		StartTime:   time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
 		EndTime:     time.Date(2026, 4, 12, 9, 0, 0, 0, time.UTC),
-		ReminderMin: 10,
+		ReminderMins: []int{10},
 		TimeZone:    "America/Sao_Paulo",
 	}
 

@@ -76,7 +76,7 @@ func (uc *TreatmentUseCase) Create(ctx context.Context, in service.CreateTreatme
 				Description: fmt.Sprintf("Pet: %s", pet.Name),
 				StartTime:   doses[i].ScheduledFor,
 				EndTime:     doses[i].ScheduledFor,
-				ReminderMin: 0,
+				ReminderMins: nil,
 				TimeZone:    uc.timezone,
 			})
 			if err != nil {
@@ -134,7 +134,7 @@ func (uc *TreatmentUseCase) createRecurringTreatment(ctx context.Context, pet *d
 		Description: fmt.Sprintf("Pet: %s", pet.Name),
 		StartTime:   in.StartedAt,
 		EndTime:     in.StartedAt,
-		ReminderMin: 0,
+		ReminderMins: nil,
 		TimeZone:    uc.timezone,
 	}, in.IntervalHours)
 	if err != nil {

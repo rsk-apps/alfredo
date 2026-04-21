@@ -29,6 +29,11 @@ swift/CalendarHelper/.build/
 .agents
 harness/
 scripts/
+!scripts/
+scripts/*
+!scripts/pre-push
+!scripts/verify-verifier.sh
+.cache/
 
 # Runtime artifacts
 calendar.pid
